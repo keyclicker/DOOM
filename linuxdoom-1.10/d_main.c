@@ -326,6 +326,11 @@ void D_Display (void)
     // wipe update
     wipe_EndScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
 
+#ifdef WEB
+    /* Continue the melt on later browser frames. */
+    extern void Web_BeginWipe(void);
+    Web_BeginWipe();
+#else
     wipestart = I_GetTime () - 1;
 
     do
@@ -342,6 +347,7 @@ void D_Display (void)
 	M_Drawer ();                            // menu is drawn even on top of wipes
 	I_FinishUpdate ();                      // page flip or blit buffer
     } while (!done);
+#endif
 }
 
 
@@ -366,6 +372,10 @@ void D_DoomLoop (void)
 	
     I_InitGraphics ();
 
+#ifdef WEB
+    /* The browser owns the loop; never block its event thread. */
+    return;
+#endif
     while (1)
     {
 	// frame syncronous IO operations
