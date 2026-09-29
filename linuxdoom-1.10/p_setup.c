@@ -591,6 +591,10 @@ P_SetupLevel
     char	lumpname[9];
     int		lumpnum;
 	
+#ifdef WEB
+    extern void Web_ResetInterpolation(void);
+    Web_ResetInterpolation();
+#endif
     totalkills = totalitems = totalsecret = wminfo.maxfrags = 0;
     wminfo.partime = 180;
     for (i=0 ; i<MAXPLAYERS ; i++)

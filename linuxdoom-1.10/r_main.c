@@ -38,6 +38,12 @@ static const char rcsid[] = "$Id: r_main.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #include "m_bbox.h"
 
 #include "r_local.h"
+#ifdef WEB
+#include "render.h"
+#else
+#define WEB_LIGHT_WIDTH (viewwidth << detailshift)
+#define WEB_LIGHT_SCALE(x) (x)
+#endif
 #include "r_sky.h"
 
 
@@ -100,7 +106,7 @@ int			viewangletox[FINEANGLES/2];
 // The xtoviewangleangle[] table maps a screen pixel
 // to the lowest viewangle that maps back to x ranges
 // from clipangle to -clipangle.
-angle_t			xtoviewangle[SCREENWIDTH+1];
+angle_t			xtoviewangle[R_MAXWIDTH+1];
 
 
 // UNUSED.
@@ -554,14 +560,14 @@ void R_InitTextureMapping (void)
     //
     // Calc focallength
     //  so FIELDOFVIEW angles covers SCREENWIDTH.
-    focallength = FixedDiv (centerxfrac,
+    focallength = FixedDiv (projection,
 			    finetangent[FINEANGLES/4+FIELDOFVIEW/2] );
 	
     for (i=0 ; i<FINEANGLES/2 ; i++)
     {
-	if (finetangent[i] > FRACUNIT*2)
+	if (finetangent[i] > FRACUNIT*8)
 	    t = -1;
-	else if (finetangent[i] < -FRACUNIT*2)
+	else if (finetangent[i] < -FRACUNIT*8)
 	    t = viewwidth+1;
 	else
 	{
@@ -690,6 +696,9 @@ void R_ExecuteSetViewSize (void)
 	viewheight = (setblocks*168/10)&~7;
     }
     
+#ifdef WEB
+    Web_SizeView();
+#endif
     detailshift = setdetail;
     viewwidth = scaledviewwidth>>detailshift;
 	
@@ -698,6 +707,9 @@ void R_ExecuteSetViewSize (void)
     centerxfrac = centerx<<FRACBITS;
     centeryfrac = centery<<FRACBITS;
     projection = centerxfrac;
+#ifdef WEB
+    projection = Web_Projection();
+#endif
 
     if (!detailshift)
     {
@@ -719,8 +731,8 @@ void R_ExecuteSetViewSize (void)
     R_InitTextureMapping ();
     
     // psprite scales
-    pspritescale = FRACUNIT*viewwidth/SCREENWIDTH;
-    pspriteiscale = FRACUNIT*SCREENWIDTH/viewwidth;
+    pspritescale = projection / 160;
+    pspriteiscale = FixedDiv(160 * FRACUNIT, projection);
     
     // thing clipping
     for (i=0 ; i<viewwidth ; i++)
@@ -731,7 +743,7 @@ void R_ExecuteSetViewSize (void)
     {
 	dy = ((i-viewheight/2)<<FRACBITS)+FRACUNIT/2;
 	dy = abs(dy);
-	yslope[i] = FixedDiv ( (viewwidth<<detailshift)/2*FRACUNIT, dy);
+	yslope[i] = FixedDiv ( projection<<detailshift, dy);
     }
 	
     for (i=0 ; i<viewwidth ; i++)
@@ -747,7 +759,7 @@ void R_ExecuteSetViewSize (void)
 	startmap = ((LIGHTLEVELS-1-i)*2)*NUMCOLORMAPS/LIGHTLEVELS;
 	for (j=0 ; j<MAXLIGHTSCALE ; j++)
 	{
-	    level = startmap - j*SCREENWIDTH/(viewwidth<<detailshift)/DISTMAP;
+	    level = startmap - j*SCREENWIDTH/WEB_LIGHT_WIDTH/DISTMAP;
 	    
 	    if (level < 0)
 		level = 0;
@@ -758,6 +770,9 @@ void R_ExecuteSetViewSize (void)
 	    scalelight[i][j] = colormaps + level*256;
 	}
     }
+#ifdef WEB
+    Web_SaveView();
+#endif
 }
 
 
@@ -838,6 +853,9 @@ void R_SetupFrame (player_t* player)
     extralight = player->extralight;
 
     viewz = player->viewz;
+#ifdef WEB
+    Web_InterpolateCamera(player);
+#endif
     
     viewsin = finesine[viewangle>>ANGLETOFINESHIFT];
     viewcos = finecosine[viewangle>>ANGLETOFINESHIFT];

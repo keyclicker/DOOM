@@ -101,8 +101,10 @@ const Doom = {
       this.restore();
       this.engine._web_init();
       this.context = this.canvas.getContext('2d', {alpha: false});
+      Settings.apply();
       this.running = true;
       this.loader.hidden = true;
+      if (Settings.dialog.open) this.audio.suspend();
       this.lastFrame = performance.now();
       requestAnimationFrame(time => this.frame(time));
     } catch (error) {
@@ -123,11 +125,18 @@ const Doom = {
           this.engine._web_mouse(this.buttons,
             Math.round(this.mouseX), Math.round(this.mouseY));
           this.mouseX = this.mouseY = 0;
-          this.engine._web_tick();
+          if (Settings.value.unlocked) this.engine._web_advance();
+          else this.engine._web_tick();
           this.elapsed -= 1000 / 35;
           changed = true;
         }
-        if (changed) this.draw();
+        if (Settings.value.unlocked) {
+          this.engine._web_render(Math.round(this.elapsed * 35 / 1000 * 65536));
+        }
+        if (changed || Settings.value.unlocked) {
+          this.draw();
+          Settings.presented(time);
+        }
       }
       this.lastFrame = time;
       requestAnimationFrame(next => this.frame(next));
@@ -139,7 +148,8 @@ const Doom = {
     const buffer = this.engine.HEAPU8.buffer;
     if (this.image?.data.buffer !== buffer) {
       this.image = new ImageData(new Uint8ClampedArray(buffer,
-        this.engine._web_pixels(), 320 * 200 * 4), 320, 200);
+        this.engine._web_pixels(), this.canvas.width * this.canvas.height * 4),
+        this.canvas.width, this.canvas.height);
     }
     // CSS displays the original non-square pixels at the CRT's 4:3 aspect.
     this.context.putImageData(this.image, 0, 0);
@@ -235,6 +245,12 @@ document.ondrop = event => {
 Doom.canvas.onclick = () => Doom.capture();
 document.oncontextmenu = event => event.preventDefault();
 document.onkeydown = event => {
+  if (Settings.key(event)) return;
+  if (event.code === 'Backquote' && !event.repeat && !event.metaKey) {
+    event.preventDefault();
+    Settings.open();
+    return;
+  }
   if (!Doom.running) return;
   syncModifiers(event);
   // Keep Command shortcuts, but allow movement with a Ctrl–Alt–Command chord.
@@ -248,7 +264,7 @@ document.onkeydown = event => {
   Doom.engine._web_key(key, 1);
 };
 document.onkeyup = event => {
-  if (!Doom.running) return;
+  if (!Doom.running || Settings.dialog.open) return;
   syncModifiers(event);
   const key = Doom.held.get(event.code);
   if (!key) return;
@@ -275,13 +291,15 @@ window.onblur = () => {
   Doom.release();
   Doom.suspended = true;
   Doom.elapsed = 0;
+  Settings.frames = 0;
+  Settings.sampleTime = 0;
   Doom.audio.suspend();
   Doom.persist();
 };
 window.onfocus = () => {
-  Doom.suspended = false;
+  Doom.suspended = Settings.dialog.open;
   Doom.lastFrame = performance.now();
-  if (Doom.running) Doom.audio.resume().catch(console.warn);
+  if (Doom.running && !Doom.suspended) Doom.audio.resume().catch(console.warn);
 };
 document.onvisibilitychange = () => {
   if (document.hidden) window.onblur();

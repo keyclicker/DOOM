@@ -37,6 +37,12 @@ rcsid[] = "$Id: r_segs.c,v 1.3 1997/01/29 20:10:19 b1 Exp $";
 #include "doomstat.h"
 
 #include "r_local.h"
+#ifdef WEB
+#include "render.h"
+#else
+#define WEB_LIGHT_WIDTH (viewwidth << detailshift)
+#define WEB_LIGHT_SCALE(x) (x)
+#endif
 #include "r_sky.h"
 
 
@@ -166,7 +172,7 @@ R_RenderMaskedSegRange
 	{
 	    if (!fixedcolormap)
 	    {
-		index = spryscale>>LIGHTSCALESHIFT;
+		index = WEB_LIGHT_SCALE(spryscale)>>LIGHTSCALESHIFT;
 
 		if (index >=  MAXLIGHTSCALE )
 		    index = MAXLIGHTSCALE-1;
@@ -266,7 +272,7 @@ void R_RenderSegLoop (void)
 	    texturecolumn = rw_offset-FixedMul(finetangent[angle],rw_distance);
 	    texturecolumn >>= FRACBITS;
 	    // calculate lighting
-	    index = rw_scale>>LIGHTSCALESHIFT;
+	    index = WEB_LIGHT_SCALE(rw_scale)>>LIGHTSCALESHIFT;
 
 	    if (index >=  MAXLIGHTSCALE )
 		index = MAXLIGHTSCALE-1;
@@ -608,8 +614,8 @@ R_StoreWallRange
 	{
 	    // masked midtexture
 	    maskedtexture = true;
-	    ds_p->maskedtexturecol = maskedtexturecol = lastopening - rw_x;
-	    lastopening += rw_stopx - rw_x;
+            ds_p->maskedtexturecol = maskedtexturecol =
+                R_AllocOpenings(rw_stopx - rw_x) - rw_x;
 	}
     }
     
@@ -718,17 +724,17 @@ R_StoreWallRange
     if ( ((ds_p->silhouette & SIL_TOP) || maskedtexture)
 	 && !ds_p->sprtopclip)
     {
-	memcpy (lastopening, ceilingclip+start, 2*(rw_stopx-start));
-	ds_p->sprtopclip = lastopening - start;
-	lastopening += rw_stopx - start;
+        ds_p->sprtopclip = R_AllocOpenings(rw_stopx - start);
+        memcpy(ds_p->sprtopclip, ceilingclip + start, 2 * (rw_stopx - start));
+        ds_p->sprtopclip -= start;
     }
     
     if ( ((ds_p->silhouette & SIL_BOTTOM) || maskedtexture)
 	 && !ds_p->sprbottomclip)
     {
-	memcpy (lastopening, floorclip+start, 2*(rw_stopx-start));
-	ds_p->sprbottomclip = lastopening - start;
-	lastopening += rw_stopx - start;	
+        ds_p->sprbottomclip = R_AllocOpenings(rw_stopx - start);
+        memcpy(ds_p->sprbottomclip, floorclip + start, 2 * (rw_stopx - start));
+        ds_p->sprbottomclip -= start;
     }
 
     if (maskedtexture && !(ds_p->silhouette&SIL_TOP))

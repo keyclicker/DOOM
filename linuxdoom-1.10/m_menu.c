@@ -1133,6 +1133,12 @@ void M_ChangeDetail(int choice)
     choice = 0;
     detailLevel = 1 - detailLevel;
 
+#ifdef WEB
+    R_SetViewSize(screenblocks, detailLevel);
+    players[consoleplayer].message = detailLevel ? DETAILLO : DETAILHI;
+    return;
+#endif
+
     // FIXME - does not work. Remove anyway?
     fprintf( stderr, "M_ChangeDetail: low detail mode n.a.\n");
 

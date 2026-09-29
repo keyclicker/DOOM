@@ -52,7 +52,11 @@
 #define SIL_TOP			2
 #define SIL_BOTH		3
 
-#define MAXDRAWSEGS		256
+#ifdef WEB
+#define MAXDRAWSEGS 1024
+#else
+#define MAXDRAWSEGS 256
+#endif
 
 
 
@@ -467,6 +471,10 @@ typedef struct
   
   // leave pads for [minx-1]/[maxx+1]
   
+#ifdef WEB
+  unsigned short pad1, top[R_MAXWIDTH], pad2;
+  unsigned short pad3, bottom[R_MAXWIDTH], pad4;
+#else
   byte		pad1;
   // Here lies the rub for all
   //  dynamic resize/change of resolution.
@@ -476,6 +484,7 @@ typedef struct
   // See above.
   byte		bottom[SCREENWIDTH];
   byte		pad4;
+#endif
 
 } visplane_t;
 

@@ -123,6 +123,12 @@ EV_Teleport
 
 		thing->angle = m->angle;
 		thing->momx = thing->momy = thing->momz = 0;
+#ifdef WEB
+                {
+                    extern void Web_SnapObject(mobj_t *object);
+                    Web_SnapObject(thing);
+                }
+#endif
 		return 1;
 	    }	
 	}

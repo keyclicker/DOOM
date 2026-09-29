@@ -40,11 +40,14 @@ typedef void (*planefunction_t) (int top, int bottom);
 extern planefunction_t	floorfunc;
 extern planefunction_t	ceilingfunc_t;
 
-extern short		floorclip[SCREENWIDTH];
-extern short		ceilingclip[SCREENWIDTH];
+extern short		floorclip[R_MAXWIDTH];
+extern short		ceilingclip[R_MAXWIDTH];
 
-extern fixed_t		yslope[SCREENHEIGHT];
-extern fixed_t		distscale[SCREENWIDTH];
+extern fixed_t		yslope[R_MAXHEIGHT];
+extern fixed_t		distscale[R_MAXWIDTH];
+
+/* Reserve clipping columns or fail before overflowing renderer storage. */
+short *R_AllocOpenings(int count);
 
 void R_InitPlanes (void);
 void R_ClearPlanes (void);

@@ -28,7 +28,11 @@
 #pragma interface
 #endif
 
-#define MAXVISSPRITES  	128
+#ifdef WEB
+#define MAXVISSPRITES 512
+#else
+#define MAXVISSPRITES 128
+#endif
 
 extern vissprite_t	vissprites[MAXVISSPRITES];
 extern vissprite_t*	vissprite_p;
@@ -36,8 +40,8 @@ extern vissprite_t	vsprsortedhead;
 
 // Constant arrays used for psprite clipping
 //  and initializing clipping.
-extern short		negonearray[SCREENWIDTH];
-extern short		screenheightarray[SCREENWIDTH];
+extern short		negonearray[R_MAXWIDTH];
+extern short		screenheightarray[R_MAXWIDTH];
 
 // vars for R_DrawMaskedColumn
 extern short*		mfloorclip;
