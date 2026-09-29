@@ -1,4 +1,4 @@
-# Doom in two files
+# Doom in three files
 
 The original Linux Doom 1.10 engine and software renderer, compiled to
 WebAssembly. Load a local IWAD; everything after that is the original game.
@@ -17,7 +17,7 @@ Open `http://localhost:8000`, choose or drop a Doom IWAD, then click the game
 to capture the mouse and enter fullscreen. The page also requests fullscreen
 when a user selects a file; browsers may require the additional click.
 
-Deploy **only `web/dist/index.html` and `web/dist/doom.wasm`**, side by side,
+Deploy **`index.html`, `doom.wasm`, and `music.wasm`** from `web/dist` side by side
 on any static HTTPS server. Localhost HTTP also works. Opening the HTML
 directly with `file://` does not work because browsers restrict WASM fetching.
 WADs are read locally and never uploaded, bundled, or automatically fetched.
@@ -61,7 +61,12 @@ removes them. Reload the page to choose another WAD after quitting.
   original 35 Hz simulation, presents the 320×200 framebuffer at 4:3, and
   persists Doom's native save files. A long frame catches up at most 250 ms.
 - `audio.js` caches decoded 8-bit PCM samples and lets Web Audio mix them.
-  Doom still chooses sounds, volume, stereo position, and pitch.
+  Doom still chooses sounds, volume, stereo position, and pitch. Both volume
+  sliders use the engine's 0–15 scale.
+- `music.c` reads MUS events at 140 Hz and programs the IWAD's `GENMIDI`
+  instruments into a vendored Nuked OPL3 synthesizer. `music-worklet.js`
+  runs it on the audio thread, so rendering stalls do not interrupt music.
+  The worklet source is inlined in the HTML; `music.wasm` has no imports.
 - `d_main.c` yields control to the browser and advances the original melt
   wipe over successive frames. `d_net.c` leaves tic creation to `web_tick`.
 - `doomdef.h` disables the external Unix sound server for the web build.
@@ -75,7 +80,12 @@ Map loading, menus, fixed-point arithmetic, and the software renderer
 remain the original code. The build uses 32-bit pointers, wrapping
 signed arithmetic, and disabled strict aliasing for the legacy engine.
 
-Music is absent in the upstream Linux source and remains absent here.
+Music uses Sound Blaster-style OPL3 synthesis, with percussion, layered
+instruments, pitch bend, channel volume, panning, and sustain. Tracks change
+through the original engine's music API. Looping, the music volume menu,
+pause/resume, and focus suspension work without downloading a soundfont.
+The chip is emulated; voice allocation is simplified rather than reproducing
+every version-specific DMX voice-stealing quirk. Only MUS music is supported.
 Network multiplayer, hardware rendering, and free look are not implemented.
 The original engine's map/rendering limits still apply.
 
@@ -83,23 +93,29 @@ The original engine's map/rendering limits still apply.
 
 The default is `-Oz` with link-time optimization and `emmalloc`. Override with
 `OPT=-O2 python3 web/build.py` to favor execution speed. There is no Asyncify,
-thread pool, GL compatibility layer, or packaged game data.
+thread pool, GL compatibility layer, or packaged game data. The small music
+module always uses `-O2` because it runs in the audio callback.
 
 Representative builds with Emscripten 6.0.9:
 
-| Optimization | HTML | WASM | Combined gzip |
-| --- | ---: | ---: | ---: |
-| `-Oz` | 74 KB | 293 KB | 160 KB |
-| `-O2` | 75 KB | 369 KB | 177 KB |
+| File | Raw | Gzip |
+| --- | ---: | ---: |
+| `index.html` | 78 KB | 23 KB |
+| `doom.wasm` | 293 KB | 138 KB |
+| `music.wasm` | 20 KB | 9 KB |
+| Total | 392 KB | 170 KB |
 
 The build prints exact raw and gzip sizes; compressed sizes require HTTP
-compression by the hosting server. The output directory still has two files.
+compression by the hosting server. Music adds about 10 KB compressed,
+including the worklet and browser integration.
 
 Chromium tests on a Linux VM measured a median **0.3 ms** for `-Oz` versus
 **0.2 ms** for `-O2` per warmed game tick plus Canvas submission. This includes
 software rendering and pixel expansion, but excludes browser compositing and
 display latency. Both leave substantial headroom in the 28.6 ms tick budget.
-These are local measurements, not a claim about all maps or devices.
+Music synthesis measured 53 ms of CPU per audio second, roughly 5% of one
+core, with 1 MiB of separate WASM memory. The audio callback allocates no
+buffers. These are local measurements, not a claim about all devices.
 
 WASM memory starts at 32 MiB and can grow to 128 MiB. The tested games remained
 at 32 MiB. Canvas views are reused until WASM memory grows; sample buffers are
@@ -114,6 +130,7 @@ packages. Game data is supplied by the caller and never committed.
 
 ```sh
 node web/test.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
+node web/test-music.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
 ```
 
 Tests start a game through its menus, move, fire, use the automap, pause,
@@ -123,4 +140,11 @@ They reject unexpected browser exceptions and external network requests,
 and report frame timings and memory usage. `-O2` and `-Oz` produced identical
 framebuffer hashes at the checked starting and movement positions.
 
-The code is GPL-2.0; see [LICENSE.TXT](../LICENSE.TXT). Game data is separate.
+Music tests synthesize the first five seconds of all 80 music lumps in these
+IWADs and check tempo at 44.1/48 kHz, looping, sample-exact pause/resume,
+stop/restart, and malformed scores. Browser tests measure actual worklet
+output for title/level music, pause/resume, the volume menu, and suspension.
+
+The port is GPL-2.0; see [LICENSE.TXT](../LICENSE.TXT). Nuked OPL3 is
+LGPL-2.1-or-later; source revisions and notices are in
+[vendor/README.md](vendor/README.md). Game data is separate.

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
-/** Play Doom's unsigned 8-bit PCM samples through the browser mixer. */
+/** Mix PCM effects and the WAD's OPL music through Web Audio. */
 class DoomAudio {
   constructor() {
     this.context = null;
@@ -13,6 +13,41 @@ class DoomAudio {
   async resume() {
     this.context ??= new AudioContext({latencyHint: 'interactive'});
     await this.context.resume();
+  }
+
+  /** Compile once off the audio thread; the worklet source is inlined. */
+  async initMusic() {
+    if (this.music) return;
+    const url = URL.createObjectURL(new Blob([/* MUSIC_WORKLET */],
+      {type: 'text/javascript'}));
+    try {
+      const [module] = await Promise.all([
+        WebAssembly.compileStreaming(
+          fetch(new URL('music.wasm', location.href))),
+        this.context.audioWorklet.addModule(url),
+      ]);
+      this.music = new AudioWorkletNode(this.context, 'doom-music', {
+        numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
+        processorOptions: {module},
+      });
+      this.musicGain = this.context.createGain();
+      this.music.connect(this.musicGain).connect(this.context.destination);
+      this.music.port.onmessage = ({data}) => {
+        if (data.error) Doom.fail(new Error(data.error));
+      };
+      this.music.onprocessorerror = () =>
+        Doom.fail(new Error('Music processor failed'));
+    } finally { URL.revokeObjectURL(url); }
+  }
+
+  /** Transfer only the copied lump, never the engine's entire WASM memory. */
+  song(command, data, looping = false) {
+    if (command === 'volume') {
+      this.musicGain.gain.value = Math.min(15, Math.max(0, data)) / 15;
+    } else {
+      this.music.port.postMessage({command, data, looping},
+        data instanceof Uint8Array ? [data.buffer] : []);
+    }
   }
 
   /** Decode each lump once; retain its original sample rate and pitch. */
@@ -55,7 +90,7 @@ class DoomAudio {
       channel.source.stop();
       this.channels.delete(handle);
     } else if (command === 2) {
-      channel.gain.gain.value = volume / 127;
+      channel.gain.gain.value = volume / 15;
       channel.pan.pan.value = Math.max(-1, Math.min(1, (separation - 128) / 128));
       channel.source.playbackRate.value = 2 ** ((pitch - 128) / 64);
     }

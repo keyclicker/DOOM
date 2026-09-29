@@ -18,7 +18,8 @@ let wadPath = wadPaths[0];
 const server = createServer(async (request, response) => {
   const path = request.url.split('?')[0];
   const files = {'/': join(root, 'index.html'),
-    '/doom.wasm': join(root, 'doom.wasm'), '/test.wad': wadPath};
+    '/doom.wasm': join(root, 'doom.wasm'),
+    '/music.wasm': join(root, 'music.wasm'), '/test.wad': wadPath};
   if (!files[path]) { response.writeHead(404).end(); return; }
   response.setHeader('Content-Type', path.endsWith('.wasm')
     ? 'application/wasm' : path === '/' ? 'text/html' : 'application/octet-stream');
@@ -101,6 +102,20 @@ try {
     })()`);
     assert(await evaluate('Doom.running'), await evaluate('Doom.message.textContent'));
 
+    // Measure the worklet's actual output, independently of sound effects.
+    await evaluate(`(() => {
+      Doom.musicMeter = Doom.audio.context.createAnalyser();
+      Doom.musicMeter.fftSize = 2048;
+      Doom.audio.musicGain.connect(Doom.musicMeter);
+      Doom.musicEnergy = () => {
+        const pcm = new Float32Array(2048);
+        Doom.musicMeter.getFloatTimeDomainData(pcm);
+        return pcm.reduce((sum, value) => sum + value * value, 0);
+      };
+      for (let i = 0; i < 3; i++) Doom.engine._web_tick();
+    })()`);
+    await until(() => evaluate('Doom.musicEnergy() > 0.001'));
+
     const result = await evaluate(`(() => {
       const e = Doom.engine;
       const tick = (count = 1) => {
@@ -160,6 +175,38 @@ try {
     })()`);
     assert(result.sampleCount > 0, 'No sound effects reached Web Audio');
     console.log(JSON.stringify({wad: wadPath.split('/').pop(), ...result}));
+
+    await until(() => evaluate('Doom.musicEnergy() > 0.001'));
+    await evaluate(`(() => {
+      Doom.testKey = code => {
+        Doom.engine._web_key(code, 1); Doom.engine._web_tick();
+        Doom.engine._web_key(code, 0); Doom.engine._web_tick();
+      };
+      Doom.testKey(255);
+    })()`);
+    await until(() => evaluate('Doom.musicEnergy() === 0'));
+    assert(await evaluate('(Doom.engine._web_state() & 32) !== 0'));
+    await evaluate('Doom.testKey(255)');
+    await until(() => evaluate('Doom.musicEnergy() > 0.001'));
+
+    // F4 opens Sound Volume. One down-arrow skips the SFX thermometer.
+    await evaluate(`(() => {
+      Doom.testKey(190); Doom.testKey(175);
+      for (let i = 0; i < 15; i++) Doom.testKey(172);
+    })()`);
+    assert.equal(await evaluate('Doom.audio.musicGain.gain.value'), 0);
+    await until(() => evaluate('Doom.musicEnergy() === 0'));
+    await evaluate(`(() => {
+      for (let i = 0; i < 15; i++) Doom.testKey(174);
+      Doom.testKey(27);
+    })()`);
+    assert.equal(await evaluate('Doom.audio.musicGain.gain.value'), 1);
+    await until(() => evaluate('Doom.musicEnergy() > 0.001'));
+    await evaluate('Doom.audio.suspend()');
+    await until(() => evaluate('Doom.audio.context.state === "suspended"'));
+    await evaluate('Doom.audio.resume()');
+    await until(() => evaluate('Doom.musicEnergy() > 0.001'));
+    console.log('PASS: audible title/level music, pause, volume menu, focus audio');
 
     // A fresh runtime must restore the saved game, not just the MEMFS instance.
     await send('Page.navigate', {url});
@@ -223,7 +270,8 @@ try {
     console.log(`PASS: ${demoFrames} demo frames`);
   }
   assert.equal(exceptions.length, 0, JSON.stringify(exceptions));
-  assert(requests.every(request => request.startsWith(url)),
+  assert(requests.every(request => request.startsWith(url)
+    || request.startsWith('blob:' + url)),
     'The game made an external network request');
   console.log('PASS: gameplay, input, menus, sound, saves, reload, local assets');
 } finally {
