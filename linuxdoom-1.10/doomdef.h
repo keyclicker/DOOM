@@ -81,9 +81,7 @@ typedef enum
 //  and unfinished. Default is synchronous.
 // Experimental asynchronous timer based is
 //  handled by SNDINTR. 
-#ifndef WEB
 #define SNDSERV  1
-#endif
 //#define SNDINTR  1
 
 

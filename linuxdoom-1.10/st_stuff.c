@@ -683,7 +683,7 @@ ST_Responder (event_t* ev)
       
       if (gamemode == commercial)
       {
-	epsd = 1;
+	epsd = 0;
 	map = (buf[0] - '0')*10 + buf[1] - '0';
       }
       else

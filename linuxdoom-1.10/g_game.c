@@ -1583,13 +1583,10 @@ void G_DoPlayDemo (void)
 { 
     skill_t skill; 
     int             i, episode, map; 
-    int             demo_version;
 	 
     gameaction = ga_nothing; 
     demobuffer = demo_p = W_CacheLumpName (defdemoname, PU_STATIC); 
-    /* Doom 1.9 IWAD demos use the same tic command layout as this release. */
-    demo_version = *demo_p++;
-    if (demo_version != VERSION && demo_version != 109)
+    if ( *demo_p++ != VERSION)
     {
       fprintf( stderr, "Demo is from a different game version!\n");
       gameaction = ga_nothing;

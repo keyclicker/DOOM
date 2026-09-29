@@ -367,10 +367,6 @@ int      gametime;
 
 void NetUpdate (void)
 {
-#ifdef WEB
-    /* web_tick builds commands once, before each deterministic game tic. */
-    return;
-#endif
     int             nowtime;
     int             newtics;
     int				i,j;
