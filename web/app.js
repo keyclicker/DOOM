@@ -207,6 +207,21 @@ function doomKey(event) {
   return 0;
 }
 
+/** Modifier flags describe both sides, even when a remapper omits keyup. */
+const doomModifiers = {Control: 0x9d, Shift: 0xb6, Alt: 0xb8};
+
+/** Reconcile modifier state on every keyboard event, including Command. */
+function syncModifiers(event) {
+  for (const name in doomModifiers) {
+    const down = event.getModifierState(name);
+    if (down === Doom.held.has(name)) continue;
+    const key = doomModifiers[name];
+    if (down) Doom.held.set(name, key);
+    else Doom.held.delete(name);
+    Doom.engine._web_key(key, Number(down));
+  }
+}
+
 document.querySelector('#choose').onclick = () => {
   Doom.audio.resume().catch(console.warn);
   document.querySelector('#file').click();
@@ -220,15 +235,21 @@ document.ondrop = event => {
 Doom.canvas.onclick = () => Doom.capture();
 document.oncontextmenu = event => event.preventDefault();
 document.onkeydown = event => {
-  if (!Doom.running || event.metaKey) return;
+  if (!Doom.running) return;
+  syncModifiers(event);
+  // Keep Command shortcuts, but allow movement with a Ctrl–Alt–Command chord.
+  if (event.metaKey && !(event.ctrlKey && event.altKey)) return;
   const key = doomKey(event);
   if (!key) return;
   event.preventDefault();
+  if (/^(Control|Shift|Alt)(Left|Right)$/.test(event.code)) return;
   if (event.repeat || Doom.held.has(event.code)) return;
   Doom.held.set(event.code, key);
   Doom.engine._web_key(key, 1);
 };
 document.onkeyup = event => {
+  if (!Doom.running) return;
+  syncModifiers(event);
   const key = Doom.held.get(event.code);
   if (!key) return;
   event.preventDefault();

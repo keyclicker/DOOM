@@ -155,8 +155,66 @@ try {
       Doom.persist();
       const save = e.FS.readFile('/doomsav0.dsg');
       if (save.length < 1000) throw Error('Save file is missing or too short');
-      document.onkeydown(new KeyboardEvent('keydown', {code: 'ControlLeft'}));
-      tick(40); Doom.release(); tick();
+      // A remapped Ctrl–Alt–Command key may omit individual modifier keyups.
+      // Native saves contain 32-bit player_t at 52; ammo[] starts at 156.
+      const bullets = bytes => new DataView(bytes.buffer, bytes.byteOffset)
+        .getInt32(52 + 156, true);
+      const baselineAmmo = bullets(save);
+      const modifier = {ControlLeft: 'ctrlKey', AltLeft: 'altKey',
+        MetaLeft: 'metaKey'};
+      const orders = [
+        ['ControlLeft', 'AltLeft', 'MetaLeft'],
+        ['ControlLeft', 'MetaLeft', 'AltLeft'],
+        ['AltLeft', 'ControlLeft', 'MetaLeft'],
+        ['AltLeft', 'MetaLeft', 'ControlLeft'],
+        ['MetaLeft', 'ControlLeft', 'AltLeft'],
+        ['MetaLeft', 'AltLeft', 'ControlLeft'],
+      ];
+      for (const order of orders) {
+        e.FS.writeFile('/doomsav0.dsg', save);
+        key('F3'); key('Enter'); tick(80);
+        const flags = {};
+        for (const code of order) {
+          flags[modifier[code]] = true;
+          document.dispatchEvent(new KeyboardEvent('keydown', {code, ...flags}));
+        }
+        document.dispatchEvent(new KeyboardEvent('keydown',
+          {code: 'ArrowDown', ...flags}));
+        if (!Doom.held.has('ArrowDown')) throw Error('Chord blocked movement');
+        tick(5);
+        // The remapper reports the complete released state on just one keyup.
+        document.dispatchEvent(new KeyboardEvent('keyup', {code: 'MetaLeft'}));
+        tick(70);
+        document.dispatchEvent(new KeyboardEvent('keyup', {code: 'ArrowDown'}));
+        if (Doom.held.size) throw Error('Chord left a key held');
+        key('F2'); key('Enter'); key('Enter'); tick(5);
+        if (bullets(e.FS.readFile('/doomsav0.dsg')) !== baselineAmmo - 1) {
+          throw Error('Short chord press did not fire exactly one round');
+        }
+      }
+      e.FS.writeFile('/doomsav0.dsg', save);
+      key('F3'); key('Enter'); tick(80);
+      document.onkeydown(new KeyboardEvent('keydown',
+        {code: 'ControlLeft', ctrlKey: true}));
+      document.onkeydown(new KeyboardEvent('keydown',
+        {code: 'ControlRight', ctrlKey: true}));
+      document.onkeyup(new KeyboardEvent('keyup',
+        {code: 'ControlLeft', ctrlKey: true}));
+      tick(40);
+      document.onkeyup(new KeyboardEvent('keyup', {code: 'ControlRight'}));
+      tick(70);
+      key('F2'); key('Enter'); key('Enter'); tick(5);
+      if (bullets(e.FS.readFile('/doomsav0.dsg')) !== baselineAmmo - 3) {
+        throw Error('Releasing one Control key interrupted the other');
+      }
+      const shortcut = new KeyboardEvent('keydown',
+        {code: 'KeyR', metaKey: true, cancelable: true});
+      document.dispatchEvent(shortcut);
+      if (shortcut.defaultPrevented || Doom.held.has('KeyR')) {
+        throw Error('Game swallowed a plain Command shortcut');
+      }
+      Doom.release(); tick();
+      e.FS.writeFile('/doomsav0.dsg', save);
       key('F3'); key('Enter'); tick(80);
       key('Tab'); tick(5); key('Tab');
       key('Pause'); tick(5);
