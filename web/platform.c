@@ -205,13 +205,51 @@ void I_UpdateSoundParams(int handle, int vol, int sep, int pitch)
     browser_channel(2, handle, vol, sep, pitch);
 }
 
-/* Linux Doom 1.10 has no music backend. Preserve that in the minimal port. */
+/* The audio worklet owns music timing; game tics only send control messages. */
+static void *song;
+static int song_length;
+EM_JS(void, browser_music, (int command, int value, int length), {
+    if (command === 0) {
+        Doom.audio.song('bank', HEAPU8.slice(value, value + length));
+    } else if (command === 1) Doom.audio.song('volume', value);
+    else if (command === 2) Doom.audio.song('pause', value);
+    else Doom.audio.song('stop');
+});
+EM_JS(void, browser_play_song, (int ptr, int length, int looping), {
+    Doom.audio.song('play', HEAPU8.slice(ptr, ptr + length), !!looping);
+});
+
+/* Initialization is deferred until Doom registers its first music lump. */
 void I_InitMusic(void) {}
-void I_ShutdownMusic(void) {}
-void I_SetMusicVolume(int volume) {}
-void I_PauseSong(int handle) {}
-void I_ResumeSong(int handle) {}
-int I_RegisterSong(void *data) { return 1; }
-void I_PlaySong(int handle, int looping) {}
-void I_StopSong(int handle) {}
-void I_UnRegisterSong(int handle) {}
+void I_ShutdownMusic(void) { browser_music(3, 0, 0); }
+void I_SetMusicVolume(int volume) { browser_music(1, volume, 0); }
+void I_PauseSong(int handle) { browser_music(2, 1, 0); }
+void I_ResumeSong(int handle) { browser_music(2, 0, 0); }
+
+/* Resolve the lump length through the engine's registered music entry. */
+int I_RegisterSong(void *data)
+{
+    static int bank_loaded;
+    int i;
+    if (!bank_loaded) {
+        int lump = W_GetNumForName("GENMIDI");
+        if (W_LumpLength(lump) < 6308) I_Error("Invalid GENMIDI bank");
+        browser_music(0, (int)W_CacheLumpNum(lump, PU_CACHE), 6308);
+        bank_loaded = 1;
+    }
+    for (i = 1; i < NUMMUSIC; i++) {
+        if (S_music[i].data == data) {
+            song = data;
+            song_length = W_LumpLength(S_music[i].lumpnum);
+            return 1;
+        }
+    }
+    I_Error("Unregistered music lump");
+    return 0;
+}
+void I_PlaySong(int handle, int looping)
+{
+    browser_play_song((int)song, song_length, looping);
+}
+void I_StopSong(int handle) { browser_music(3, 0, 0); }
+void I_UnRegisterSong(int handle) { song = NULL; song_length = 0; }
