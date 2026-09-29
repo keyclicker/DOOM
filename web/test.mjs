@@ -104,9 +104,14 @@ try {
 
     // Measure the worklet's actual output, independently of sound effects.
     await evaluate(`(() => {
+      const song = Doom.audio.song.bind(Doom.audio);
+      Doom.audio.song = (command, data, looping) => {
+        Doom.lastMusicCommand = [command, typeof data === 'number' ? data : null];
+        song(command, data, looping);
+      };
       Doom.musicMeter = Doom.audio.context.createAnalyser();
       Doom.musicMeter.fftSize = 2048;
-      Doom.audio.musicGain.connect(Doom.musicMeter);
+      Doom.audio.music.connect(Doom.musicMeter);
       Doom.musicEnergy = () => {
         const pcm = new Float32Array(2048);
         Doom.musicMeter.getFloatTimeDomainData(pcm);
@@ -184,9 +189,11 @@ try {
       };
       Doom.testKey(255);
     })()`);
-    await until(() => evaluate('Doom.musicEnergy() === 0'));
+    assert.deepEqual(await evaluate('Doom.lastMusicCommand'), ['pause', 1]);
+    // DMX leaves percussion ringing during pause; silence is not guaranteed.
     assert(await evaluate('(Doom.engine._web_state() & 32) !== 0'));
     await evaluate('Doom.testKey(255)');
+    assert.deepEqual(await evaluate('Doom.lastMusicCommand'), ['pause', 0]);
     await until(() => evaluate('Doom.musicEnergy() > 0.001'));
 
     // F4 opens Sound Volume. One down-arrow skips the SFX thermometer.
@@ -194,13 +201,14 @@ try {
       Doom.testKey(190); Doom.testKey(175);
       for (let i = 0; i < 15; i++) Doom.testKey(172);
     })()`);
-    assert.equal(await evaluate('Doom.audio.musicGain.gain.value'), 0);
-    await until(() => evaluate('Doom.musicEnergy() === 0'));
+    // Attenuation belongs to the synth; OPL minimum level is not digital zero.
+    assert.deepEqual(await evaluate('Doom.lastMusicCommand'), ['volume', 0]);
+    await until(() => evaluate('Doom.musicEnergy() < 0.001'));
     await evaluate(`(() => {
       for (let i = 0; i < 15; i++) Doom.testKey(174);
       Doom.testKey(27);
     })()`);
-    assert.equal(await evaluate('Doom.audio.musicGain.gain.value'), 1);
+    assert.deepEqual(await evaluate('Doom.lastMusicCommand'), ['volume', 15]);
     await until(() => evaluate('Doom.musicEnergy() > 0.001'));
     await evaluate('Doom.audio.suspend()');
     await until(() => evaluate('Doom.audio.context.state === "suspended"'));

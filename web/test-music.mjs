@@ -108,19 +108,21 @@ for (const rate of [44100, 48000]) {
   assert.equal(player.e.music_status(), 0, 'Fractional MUS timing drifted');
 }
 
-// Pausing must preserve the exact next PCM frame, not just stop new notes.
+// DMX pauses score time, keys off melodic notes, and lets envelopes decay.
 const reference = synth(bank);
 player.start(phrase);
 reference.start(phrase);
 player.render(8192);
-reference.render(8192);
 player.e.music_pause(1);
-assert.equal(player.render(44100), 0);
+assert(player.render(8192) > 0, 'Pause discarded the release envelope');
 assert.equal(player.e.music_status(), 3);
+player.render(44100 * 5);
+assert(player.render(128) < 1e-5, 'Paused melodic note did not decay');
 player.e.music_pause(0);
-player.render(128);
-reference.render(128);
-assert.deepEqual(player.output, reference.output, 'Pause advanced chip state');
+player.render(44100 * 2 - 8192);
+assert.equal(player.e.music_status(), 1, 'Pause advanced score time');
+player.render(1);
+assert.equal(player.e.music_status(), 0);
 player.e.music_stop();
 assert.equal(player.render(44100), 0, 'Stop left stuck notes');
 player.start(phrase);
@@ -131,10 +133,14 @@ assert.deepEqual(player.output, reference.output, 'Restart retained old notes');
 
 // Reject truncated headers/events and bound zero-duration loops.
 assert.equal(player.start(Buffer.alloc(16)), 0);
-for (const events of [[0x90, 0xbc], [0x50], [0x60],
+for (const events of [[0x90, 0xbc], [0x50],
   [0x90, 0xbc, 100, 255, 255, 255, 255, 255]]) {
   assert(player.start(score(events), true));
   player.render(128);
   assert.equal(player.e.music_status(), -1, 'Malformed score did not stop');
 }
+// Empty looping scores must yield for the 5 ms restart gap, never spin.
+assert(player.start(score([0x60]), true));
+assert.equal(player.render(44100), 0);
+assert.equal(player.e.music_status(), 1);
 console.log('PASS: tempo, looping, pause, resume, stop, malformed scores');

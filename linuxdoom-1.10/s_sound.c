@@ -621,7 +621,10 @@ void S_SetMusicVolume(int volume)
 		volume);
     }    
 
+#ifndef WEB
+    /* Keep the Unix volume reset out of the web OPL register stream. */
     I_SetMusicVolume(127);
+#endif
     I_SetMusicVolume(volume);
     snd_MusicVolume = volume;
 }

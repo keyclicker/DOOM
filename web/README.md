@@ -62,7 +62,8 @@ removes them. Reload the page to choose another WAD after quitting.
   persists Doom's native save files. A long frame catches up at most 250 ms.
 - `audio.js` caches decoded 8-bit PCM samples and lets Web Audio mix them.
   Doom still chooses sounds, volume, stereo position, and pitch. Both volume
-  sliders use the engine's 0–15 scale.
+  sliders use the engine's 0–15 scale; music volume goes to the OPL driver,
+  where it changes operator levels using DMX's nonlinear curve.
 - `music.c` reads MUS events at 140 Hz and programs the IWAD's `GENMIDI`
   instruments into a vendored Nuked OPL3 synthesizer. `music-worklet.js`
   runs it on the audio thread, so rendering stalls do not interrupt music.
@@ -80,12 +81,20 @@ Map loading, menus, fixed-point arithmetic, and the software renderer
 remain the original code. The build uses 32-bit pointers, wrapping
 signed arithmetic, and disabled strict aliasing for the legacy engine.
 
-Music uses Sound Blaster-style OPL3 synthesis, with percussion, layered
-instruments, pitch bend, channel volume, panning, and sustain. Tracks change
-through the original engine's music API. Looping, the music volume menu,
-pause/resume, and focus suspension work without downloading a soundfont.
-The chip is emulated; voice allocation is simplified rather than reproducing
-every version-specific DMX voice-stealing quirk. Only MUS music is supported.
+Music matches Chocolate Doom's default **OPL (AdLib/SB)** driver for Doom
+1.9: nine OPL2 voices, mono routing, the IWAD's instruments, and DMX's voice
+allocation, pitch, controller, and volume rules. The browser's slider maps
+0–15 to the driver's 0–120 scale. OPL2 ignores pan and sustain controllers.
+Pausing stops score time and releases melodic keys; percussion can keep
+ringing. Losing browser focus suspends the entire audio context.
+
+Tracks use exact 140 Hz MUS timing and a 5 ms gap when looping. Tests compare
+register writes against Chocolate Doom's unchanged driver and PCM against
+its own Nuked OPL implementation at identical event timestamps. This checks
+synthesis fidelity, not SDL callback rounding or hardware analog output.
+The browser still resets the chip for each new song and silences it on stop
+or non-looping completion. Only MUS music and Doom 1.9 OPL behavior are
+supported; older DMX versions and optional OPL3 stereo are outside this port.
 Network multiplayer, hardware rendering, and free look are not implemented.
 The original engine's map/rendering limits still apply.
 
@@ -102,18 +111,18 @@ Representative builds with Emscripten 6.0.9:
 | --- | ---: | ---: |
 | `index.html` | 78 KB | 23 KB |
 | `doom.wasm` | 293 KB | 138 KB |
-| `music.wasm` | 20 KB | 9 KB |
-| Total | 392 KB | 170 KB |
+| `music.wasm` | 26 KB | 10 KB |
+| Total | 398 KB | 171 KB |
 
 The build prints exact raw and gzip sizes; compressed sizes require HTTP
-compression by the hosting server. Music adds about 10 KB compressed,
+compression by the hosting server. Music adds about 11 KB compressed,
 including the worklet and browser integration.
 
 Chromium tests on a Linux VM measured a median **0.3 ms** for `-Oz` versus
 **0.2 ms** for `-O2` per warmed game tick plus Canvas submission. This includes
 software rendering and pixel expansion, but excludes browser compositing and
 display latency. Both leave substantial headroom in the 28.6 ms tick budget.
-Music synthesis measured 53 ms of CPU per audio second, roughly 5% of one
+Music synthesis measured 54 ms of CPU per audio second, roughly 5% of one
 core, with 1 MiB of separate WASM memory. The audio callback allocates no
 buffers. These are local measurements, not a claim about all devices.
 
@@ -141,9 +150,26 @@ and report frame timings and memory usage. `-O2` and `-Oz` produced identical
 framebuffer hashes at the checked starting and movement positions.
 
 Music tests synthesize the first five seconds of all 80 music lumps in these
-IWADs and check tempo at 44.1/48 kHz, looping, sample-exact pause/resume,
+IWADs and check tempo at 44.1/48 kHz, looping, DMX pause/release behavior,
 stop/restart, and malformed scores. Browser tests measure actual worklet
-output for title/level music, pause/resume, the volume menu, and suspension.
+output for title/level music, the volume menu, and suspension, and verify
+pause/resume command delivery.
+
+The fidelity test needs an external Chocolate Doom source checkout at
+`895f581c5d91497bdda0516612da803fe5843e28`. It verifies source hashes and
+compiles the unchanged OPL driver and chip into a temporary test module;
+none of that test code ships in the game. No SDL installation is needed.
+
+```sh
+node web/test-opl.mjs /path/to/chocolate-doom /path/to/doom1.wad \
+  /path/to/doomu.wad /path/to/doom2.wad
+```
+
+This compares every register write across two loops of all 80 MUS scores, plus
+the first ten seconds of PCM per track at 44.1/48 kHz. Crowded-note fixtures
+cover all 128 melodic instruments, all 47 percussion patches, channel
+mapping, layered voices, pitch bends, ignored controllers, and volume
+changes. Pause key-offs and release samples are compared as well.
 
 The port is GPL-2.0; see [LICENSE.TXT](../LICENSE.TXT). Nuked OPL3 is
 LGPL-2.1-or-later; source revisions and notices are in

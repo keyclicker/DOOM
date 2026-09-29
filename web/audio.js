@@ -30,8 +30,7 @@ class DoomAudio {
         numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
         processorOptions: {module},
       });
-      this.musicGain = this.context.createGain();
-      this.music.connect(this.musicGain).connect(this.context.destination);
+      this.music.connect(this.context.destination);
       this.music.port.onmessage = ({data}) => {
         if (data.error) Doom.fail(new Error(data.error));
       };
@@ -42,12 +41,8 @@ class DoomAudio {
 
   /** Transfer only the copied lump, never the engine's entire WASM memory. */
   song(command, data, looping = false) {
-    if (command === 'volume') {
-      this.musicGain.gain.value = Math.min(15, Math.max(0, data)) / 15;
-    } else {
-      this.music.port.postMessage({command, data, looping},
-        data instanceof Uint8Array ? [data.buffer] : []);
-    }
+    this.music.port.postMessage({command, data, looping},
+      data instanceof Uint8Array ? [data.buffer] : []);
   }
 
   /** Decode each lump once; retain its original sample rate and pitch. */

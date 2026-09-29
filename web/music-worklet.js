@@ -31,6 +31,7 @@ class DoomMusicProcessor extends AudioWorkletProcessor {
       }
     } else if (command === 'pause') this.synth.music_pause(data);
     else if (command === 'stop') this.synth.music_stop();
+    else if (command === 'volume') this.synth.music_set_volume(data);
   }
 
   /** Fill the output without allocation; also handle larger future quanta. */
