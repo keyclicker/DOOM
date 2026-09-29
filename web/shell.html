@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DOOM</title>
+<!-- Doom source: GPL-2.0. See the source repository's LICENSE.TXT. -->
+<!-- Nuked OPL3: LGPL-2.1-or-later. Source: https://github.com/keyclicker/DOOM -->
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden;
+  background: #000; color: #ddd; font: 16px monospace; }
+canvas { position: absolute; inset: 0; margin: auto;
+  width: min(100vw, 133.333333vh); height: min(100vh, 75vw);
+  image-rendering: pixelated; }
+#load { position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; flex-direction: column; gap: 16px; }
+#load[hidden] { display: none; }
+button { font: inherit; color: inherit; background: #181818;
+  border: 1px solid #555; padding: 12px 20px; cursor: pointer; }
+#message { max-width: 50ch; text-align: center; white-space: pre-wrap; }
+</style>
+<canvas id="screen" width="320" height="200"></canvas>
+<div id="load"><button id="choose">Load WAD</button>
+<input id="file" type="file" accept=".wad" hidden>
+<span id="message">Or drop a WAD here</span></div>
+<script>
+/* ENGINE_CODE */
+/* BROWSER_CODE */
+</script>
+</html>
