@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Compile Doom and inline browser code into a two-file distribution."""
+"""Compile Doom and its audio-thread synthesizer, then inline browser code."""
 
 import gzip
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -30,14 +31,23 @@ def main():
         '-o', str(OUT / 'doom.js'),
     ]
     subprocess.run(command, check=True)
+    subprocess.run([
+        'emcc', str(ROOT / 'web/music.c'),
+        str(ROOT / 'web/vendor/nuked-opl3/opl3.c'),
+        '-O2', '-flto', '-fwrapv', '--no-entry', '-sSTANDALONE_WASM=1',
+        '-sFILESYSTEM=0', '-sINITIAL_MEMORY=1048576', '-sSTACK_SIZE=65536',
+        '-o', str(OUT / 'music.wasm'),
+    ], check=True)
     html = (ROOT / 'web/shell.html').read_text()
     scripts = ['audio.js', 'app.js']
     code = '\n'.join((ROOT / 'web' / p).read_text() for p in scripts)
+    worklet = (ROOT / 'web/music-worklet.js').read_text()
+    code = code.replace('/* MUSIC_WORKLET */', json.dumps(worklet))
     html = html.replace('/* BROWSER_CODE */', code)
     html = html.replace('/* ENGINE_CODE */', (OUT / 'doom.js').read_text())
     (OUT / 'index.html').write_text(html)
     (OUT / 'doom.js').unlink()
-    for name in ['index.html', 'doom.wasm']:
+    for name in ['index.html', 'doom.wasm', 'music.wasm']:
         data = (OUT / name).read_bytes()
         print(f'{name}: {len(data):,} bytes; gzip {len(gzip.compress(data)):,}')
 

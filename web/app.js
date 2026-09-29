@@ -85,6 +85,7 @@ const Doom = {
       document.documentElement.requestFullscreen?.().catch(console.warn);
       await this.audio.resume();
       this.message.textContent = 'Loading…';
+      await this.audio.initMusic();
       const bytes = new Uint8Array(await file.arrayBuffer());
       const name = inspectWad(bytes);
       const hash = await crypto.subtle.digest('SHA-256', bytes);
