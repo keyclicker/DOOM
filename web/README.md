@@ -48,6 +48,10 @@ Original bindings apply:
 | Pause | Pause |
 | F11 | Original gamma control |
 
+Remapped Ctrl–Alt–Command chords keep the underlying Doom bindings:
+Control fires and Alt strafes. Releasing the chord releases those actions,
+even when the remapper reports them together on a single key event.
+
 Some browsers reserve function keys. Save/load are also in Doom's menu.
 The game suspends when the tab loses focus. Saves and preferences persist in
 browser local storage, separately for each IWAD's SHA-256. Clearing site data
@@ -141,6 +145,11 @@ packages. Game data is supplied by the caller and never committed.
 node web/test.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
 node web/test-music.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
 ```
+
+Input regressions check all six Ctrl–Alt–Command press orders, movement
+while the chord is held, combined modifier releases, independent left/right
+Control keys, and ordinary Command shortcuts. Ammo counts verify one round
+per short tap and the original continuous fire while Control remains held.
 
 Tests start a game through its menus, move, fire, use the automap, pause,
 save/load, reload the page and restore saves, then warp to and save every map.
