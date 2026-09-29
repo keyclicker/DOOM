@@ -21,10 +21,10 @@
 #include "w_wad.h"
 #include "z_zone.h"
 #include "f_wipe.h"
+#include "render.h"
 #include <emscripten.h>
 
 /* Pixels are expanded once per frame, using a palette lookup table. */
-static unsigned int rgba[SCREENWIDTH * SCREENHEIGHT];
 static unsigned int colors[256];
 static byte palette[768];
 static int wiping;
@@ -48,15 +48,21 @@ EM_JS(int, browser_channel, (int command, int handle, int vol,
 });
 
 /* The browser schedules exactly 35 game tics per second. */
-EMSCRIPTEN_KEEPALIVE void web_tick(void)
+static void advance(int draw, int smooth)
 {
     if (wiping) {
         wiping = !wipe_ScreenWipe(wipe_Melt, 0, 0, 320, 200, 1);
         M_Drawer();
+        Web_BlitScreen();
         I_FinishUpdate();
+        if (!wiping) {
+            extern int screenblocks, detailLevel;
+            R_SetViewSize(screenblocks, detailLevel);
+        }
         return;
     }
 
+    if (smooth) Web_Snapshot();
     D_ProcessEvents();
     G_BuildTiccmd(&netcmds[consoleplayer][maketic % BACKUPTICS]);
     if (advancedemo)
@@ -66,11 +72,41 @@ EMSCRIPTEN_KEEPALIVE void web_tick(void)
     gametic++;
     maketic++;
     S_UpdateSounds(players[consoleplayer].mo);
+    if (draw) {
+        Web_SetFraction(FRACUNIT);
+        D_Display();
+    }
+}
+
+/* Retain the original tick-and-draw entry point for capped play. */
+EMSCRIPTEN_KEEPALIVE void web_tick(void) { advance(1, 0); }
+
+/* Advance fixed-rate simulation without rendering catch-up ticks. */
+EMSCRIPTEN_KEEPALIVE void web_advance(void) { advance(0, 1); }
+
+/* Draw once per display frame, between the last two completed game tics. */
+EMSCRIPTEN_KEEPALIVE void web_render(int fraction)
+{
+    if (wiping) return;
+    Web_SetFraction(fraction);
     D_Display();
 }
 
 /* Suspend gameplay during the original melt transition, without spinning. */
 void Web_BeginWipe(void) { wiping = 1; }
+
+/* Rebind native actions, leaving menu navigation and cheat text independent. */
+EMSCRIPTEN_KEEPALIVE void web_bind(int action, int key)
+{
+    extern int key_up, key_down, key_left, key_right;
+    extern int key_strafeleft, key_straferight, key_fire, key_use;
+    extern int key_strafe, key_speed;
+    int *bindings[] = {&key_up, &key_down, &key_left, &key_right,
+        &key_strafeleft, &key_straferight, &key_fire, &key_use,
+        &key_strafe, &key_speed};
+    if (action >= 0 && action < 10 && key > 0 && key < 256)
+        *bindings[action] = key;
+}
 
 /* Post the same events used by the original platform drivers. */
 EMSCRIPTEN_KEEPALIVE void web_key(int key, int down)
@@ -87,7 +123,7 @@ EMSCRIPTEN_KEEPALIVE void web_mouse(int buttons, int x, int y)
 }
 
 /* Expose the packed RGBA framebuffer without copying it across the ABI. */
-EMSCRIPTEN_KEEPALIVE unsigned int *web_pixels(void) { return rgba; }
+EMSCRIPTEN_KEEPALIVE unsigned int *web_pixels(void) { return web_rgba; }
 
 /* Return state for input capture, diagnostics, and renderer selection. */
 EMSCRIPTEN_KEEPALIVE int web_state(void)
@@ -133,8 +169,14 @@ void I_SetPalette(byte *source)
 void I_FinishUpdate(void)
 {
     int i;
-    for (i = 0; i < 64000; i++)
-        rgba[i] = colors[screens[0][i]];
+    byte *source = screens[0];
+    if (web_width != 320 || web_height != 200) {
+        if (gamestate != GS_LEVEL || automapactive || wiping)
+            Web_BlitScreen();
+        source = web_screen;
+    }
+    for (i = 0; i < web_width * web_height; i++)
+        web_rgba[i] = colors[source[i]];
 }
 
 /* Allocate a modest zone; the original 6 MiB is tight for larger IWADs. */

@@ -35,6 +35,12 @@ rcsid[] = "$Id: r_draw.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 #include "w_wad.h"
 
 #include "r_local.h"
+#ifdef WEB
+#include "render.h"
+#else
+#define WEB_WIDTH SCREENWIDTH
+#define WEB_HEIGHT SCREENHEIGHT
+#endif
 
 // Needs access to LFB (guess what).
 #include "v_video.h"
@@ -44,8 +50,8 @@ rcsid[] = "$Id: r_draw.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 
 
 // ?
-#define MAXWIDTH			1120
-#define MAXHEIGHT			832
+#define MAXWIDTH R_MAXWIDTH
+#define MAXHEIGHT R_MAXHEIGHT
 
 // status bar height at bottom of screen
 #define SBARHEIGHT		32
@@ -116,9 +122,9 @@ void R_DrawColumn (void)
 	return; 
 				 
 #ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= WEB_WIDTH
 	|| dc_yl < 0
-	|| dc_yh >= SCREENHEIGHT) 
+	|| dc_yh >= WEB_HEIGHT)
 	I_Error ("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x); 
 #endif 
 
@@ -141,7 +147,7 @@ void R_DrawColumn (void)
 	//  using a lighting/special effects LUT.
 	*dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
 	
-	dest += SCREENWIDTH; 
+	dest += WEB_WIDTH;
 	frac += fracstep;
 	
     } while (count--); 
@@ -181,26 +187,26 @@ void R_DrawColumn (void)
     while (count >= 8) 
     { 
 	dest[0] = colormap[source[frac>>25]]; 
-	dest[SCREENWIDTH] = colormap[source[(frac+fracstep)>>25]]; 
-	dest[SCREENWIDTH*2] = colormap[source[(frac+fracstep2)>>25]]; 
-	dest[SCREENWIDTH*3] = colormap[source[(frac+fracstep3)>>25]];
+	dest[WEB_WIDTH] = colormap[source[(frac+fracstep)>>25]];
+	dest[WEB_WIDTH*2] = colormap[source[(frac+fracstep2)>>25]];
+	dest[WEB_WIDTH*3] = colormap[source[(frac+fracstep3)>>25]];
 	
 	frac += fracstep4; 
 
-	dest[SCREENWIDTH*4] = colormap[source[frac>>25]]; 
-	dest[SCREENWIDTH*5] = colormap[source[(frac+fracstep)>>25]]; 
-	dest[SCREENWIDTH*6] = colormap[source[(frac+fracstep2)>>25]]; 
-	dest[SCREENWIDTH*7] = colormap[source[(frac+fracstep3)>>25]]; 
+	dest[WEB_WIDTH*4] = colormap[source[frac>>25]];
+	dest[WEB_WIDTH*5] = colormap[source[(frac+fracstep)>>25]];
+	dest[WEB_WIDTH*6] = colormap[source[(frac+fracstep2)>>25]];
+	dest[WEB_WIDTH*7] = colormap[source[(frac+fracstep3)>>25]];
 
 	frac += fracstep4; 
-	dest += SCREENWIDTH*8; 
+	dest += WEB_WIDTH*8;
 	count -= 8;
     } 
 	
     while (count > 0)
     { 
 	*dest = colormap[source[frac>>25]]; 
-	dest += SCREENWIDTH; 
+	dest += WEB_WIDTH;
 	frac += fracstep; 
 	count--;
     } 
@@ -223,30 +229,28 @@ void R_DrawColumnLow (void)
 	return; 
 				 
 #ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= WEB_WIDTH
 	|| dc_yl < 0
-	|| dc_yh >= SCREENHEIGHT)
+	|| dc_yh >= WEB_HEIGHT)
     {
 	
 	I_Error ("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x);
     }
     //	dccount++; 
 #endif 
-    // Blocky mode, need to multiply by 2.
-    dc_x <<= 1;
-    
-    dest = ylookup[dc_yl] + columnofs[dc_x];
-    dest2 = ylookup[dc_yl] + columnofs[dc_x+1];
+    // Draw pairs without changing the caller's logical column index.
+    dest = ylookup[dc_yl] + columnofs[dc_x * 2];
+    dest2 = ylookup[dc_yl] + columnofs[dc_x * 2 + 1];
     
     fracstep = dc_iscale; 
     frac = dc_texturemid + (dc_yl-centery)*fracstep;
     
     do 
     {
-	// Hack. Does not work corretly.
+	// Duplicate each logical pixel in low-detail mode.
 	*dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
-	dest += SCREENWIDTH;
-	dest2 += SCREENWIDTH;
+	dest += WEB_WIDTH;
+	dest2 += WEB_WIDTH;
 	frac += fracstep; 
 
     } while (count--);
@@ -257,7 +261,7 @@ void R_DrawColumnLow (void)
 // Spectre/Invisibility.
 //
 #define FUZZTABLE		50 
-#define FUZZOFF	(SCREENWIDTH)
+#define FUZZOFF 1
 
 
 int	fuzzoffset[FUZZTABLE] =
@@ -305,8 +309,8 @@ void R_DrawFuzzColumn (void)
 
     
 #ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
-	|| dc_yl < 0 || dc_yh >= SCREENHEIGHT)
+    if ((unsigned)dc_x >= WEB_WIDTH
+	|| dc_yl < 0 || dc_yh >= WEB_HEIGHT)
     {
 	I_Error ("R_DrawFuzzColumn: %i to %i at %i",
 		 dc_yl, dc_yh, dc_x);
@@ -339,8 +343,8 @@ void R_DrawFuzzColumn (void)
     }*/
 
     
-    // Does not work with blocky mode.
-    dest = ylookup[dc_yl] + columnofs[dc_x];
+    // Select the physical column in either detail mode.
+    dest = ylookup[dc_yl] + columnofs[dc_x << detailshift];
 
     // Looks familiar.
     fracstep = dc_iscale; 
@@ -355,13 +359,14 @@ void R_DrawFuzzColumn (void)
 	//  a pixel that is either one column
 	//  left or right of the current one.
 	// Add index from colormap to index.
-	*dest = colormaps[6*256+dest[fuzzoffset[fuzzpos]]]; 
+	*dest = colormaps[6*256+dest[fuzzoffset[fuzzpos] * WEB_WIDTH]];
+        if (detailshift) dest[1] = *dest;
 
 	// Clamp table lookup index.
 	if (++fuzzpos == FUZZTABLE) 
 	    fuzzpos = 0;
 	
-	dest += SCREENWIDTH;
+	dest += WEB_WIDTH;
 
 	frac += fracstep; 
     } while (count--); 
@@ -394,9 +399,9 @@ void R_DrawTranslatedColumn (void)
 	return; 
 				 
 #ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= WEB_WIDTH
 	|| dc_yl < 0
-	|| dc_yh >= SCREENHEIGHT)
+	|| dc_yh >= WEB_HEIGHT)
     {
 	I_Error ( "R_DrawColumn: %i to %i at %i",
 		  dc_yl, dc_yh, dc_x);
@@ -425,7 +430,7 @@ void R_DrawTranslatedColumn (void)
 
     
     // FIXME. As above.
-    dest = ylookup[dc_yl] + columnofs[dc_x]; 
+    dest = ylookup[dc_yl] + columnofs[dc_x << detailshift];
 
     // Looks familiar.
     fracstep = dc_iscale; 
@@ -440,7 +445,8 @@ void R_DrawTranslatedColumn (void)
 	// Thus the "green" ramp of the player 0 sprite
 	//  is mapped to gray, red, black/indigo. 
 	*dest = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
-	dest += SCREENWIDTH;
+        if (detailshift) dest[1] = *dest;
+	dest += WEB_WIDTH;
 	
 	frac += fracstep; 
     } while (count--); 
@@ -528,8 +534,8 @@ void R_DrawSpan (void)
 #ifdef RANGECHECK 
     if (ds_x2 < ds_x1
 	|| ds_x1<0
-	|| ds_x2>=SCREENWIDTH  
-	|| (unsigned)ds_y>SCREENHEIGHT)
+	|| ds_x2>=WEB_WIDTH
+	|| (unsigned)ds_y>WEB_HEIGHT)
     {
 	I_Error( "R_DrawSpan: %i to %i at %i",
 		 ds_x1,ds_x2,ds_y);
@@ -651,8 +657,8 @@ void R_DrawSpanLow (void)
 #ifdef RANGECHECK 
     if (ds_x2 < ds_x1
 	|| ds_x1<0
-	|| ds_x2>=SCREENWIDTH  
-	|| (unsigned)ds_y>SCREENHEIGHT)
+	|| ds_x2>=WEB_WIDTH
+	|| (unsigned)ds_y>WEB_HEIGHT)
     {
 	I_Error( "R_DrawSpan: %i to %i at %i",
 		 ds_x1,ds_x2,ds_y);
@@ -663,11 +669,8 @@ void R_DrawSpanLow (void)
     xfrac = ds_xfrac; 
     yfrac = ds_yfrac; 
 
-    // Blocky mode, need to multiply by 2.
-    ds_x1 <<= 1;
-    ds_x2 <<= 1;
-    
-    dest = ylookup[ds_y] + columnofs[ds_x1];
+    // Count logical columns; each iteration writes two physical pixels.
+    dest = ylookup[ds_y] + columnofs[ds_x1 * 2];
   
     
     count = ds_x2 - ds_x1; 
@@ -699,6 +702,10 @@ R_InitBuffer
 { 
     int		i; 
 
+#ifdef WEB
+    Web_InitBuffer(width, height, ylookup, columnofs);
+    return;
+#endif
     // Handle resize,
     //  e.g. smaller view windows
     //  with border and/or status bar.
@@ -824,7 +831,10 @@ R_VideoErase
   //  is not optiomal, e.g. byte by byte on
   //  a 32bit CPU, as GNU GCC/Linux libc did
   //  at one point.
-    memcpy (screens[0]+ofs, screens[1]+ofs, count); 
+    memcpy (screens[0]+ofs, screens[1]+ofs, count);
+#ifdef WEB
+    Web_CopyBorder(ofs, count);
+#endif
 } 
 
 

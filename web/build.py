@@ -18,7 +18,9 @@ def main():
     sources = [p for p in sources if not p.name.startswith('i_')]
     command = [
         'emcc', *map(str, sources), str(ROOT / 'web/platform.c'),
-        '-I' + str(ROOT / 'linuxdoom-1.10'), '-DNORMALUNIX', '-DWEB',
+        str(ROOT / 'web/render.c'),
+        '-I' + str(ROOT / 'linuxdoom-1.10'), '-I' + str(ROOT / 'web'),
+        '-DNORMALUNIX', '-DWEB',
         '-std=gnu89', '-Wno-error=implicit-function-declaration',
         '-Wno-error=incompatible-pointer-types', '-fwrapv',
         '-fno-strict-aliasing', '-flto', os.getenv('OPT', '-Oz'),
@@ -39,7 +41,7 @@ def main():
         '-o', str(OUT / 'music.wasm'),
     ], check=True)
     html = (ROOT / 'web/shell.html').read_text()
-    scripts = ['audio.js', 'app.js']
+    scripts = ['audio.js', 'app.js', 'settings.js']
     code = '\n'.join((ROOT / 'web' / p).read_text() for p in scripts)
     worklet = (ROOT / 'web/music-worklet.js').read_text()
     code = code.replace('/* MUSIC_WORKLET */', json.dumps(worklet))

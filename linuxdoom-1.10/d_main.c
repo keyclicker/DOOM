@@ -73,6 +73,9 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 
 #include "p_setup.h"
 #include "r_local.h"
+#ifdef WEB
+#include "render.h"
+#endif
 
 
 #include "d_main.h"
@@ -243,7 +246,15 @@ void D_Display (void)
 	    redrawsbar = true;
 	if (inhelpscreensstate && !inhelpscreens)
 	    redrawsbar = true;              // just put away the help screen
+#ifdef WEB
+        {
+            web_ui_anchor = WEB_UI_BOTTOM;
+            ST_Drawer(viewheight == 200, redrawsbar);
+            web_ui_anchor = WEB_UI_CENTER;
+        }
+#else
 	ST_Drawer (viewheight == 200, redrawsbar );
+#endif
 	fullscreen = viewheight == 200;
 	break;
 
@@ -265,10 +276,24 @@ void D_Display (void)
     
     // draw the view directly
     if (gamestate == GS_LEVEL && !automapactive && gametic)
-	R_RenderPlayerView (&players[displayplayer]);
+    {
+#ifdef WEB
+        Web_RenderView(&players[displayplayer]);
+#else
+        R_RenderPlayerView(&players[displayplayer]);
+#endif
+    }
 
     if (gamestate == GS_LEVEL && gametic)
-	HU_Drawer ();
+    {
+#ifdef WEB
+        web_ui_anchor = WEB_UI_TOP;
+#endif
+        HU_Drawer();
+#ifdef WEB
+        web_ui_anchor = WEB_UI_CENTER;
+#endif
+    }
     
     // clean up border stuff
     if (gamestate != oldgamestate && gamestate != GS_LEVEL)

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Exercise the built game in Chromium using only Node's standard library. */
 import assert from 'node:assert/strict';
+import {testSettings} from './test-settings.mjs';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
@@ -119,7 +120,12 @@ try {
       };
       for (let i = 0; i < 3; i++) Doom.engine._web_tick();
     })()`);
-    await until(() => evaluate('Doom.musicEnergy() > 0.001'));
+    await until(() => evaluate('Doom.musicEnergy() > 0.001')).catch(async error => {
+      const state = await evaluate('({audio: Doom.audio.context.state, '
+        + 'hidden: document.hidden, focused: document.hasFocus(), '
+        + 'engine: Doom.engine._web_state(), music: Doom.lastMusicCommand})');
+      throw new Error(error.message + ': ' + JSON.stringify(state));
+    });
 
     const result = await evaluate(`(() => {
       const e = Doom.engine;
@@ -274,6 +280,8 @@ try {
     await until(() => evaluate('Doom.musicEnergy() > 0.001'));
     console.log('PASS: audible title/level music, pause, volume menu, focus audio');
 
+    await testSettings(evaluate, send);
+
     // A fresh runtime must restore the saved game, not just the MEMFS instance.
     await send('Page.navigate', {url});
     await until(() => evaluate('typeof Doom !== "undefined" && !Doom.engine'));
@@ -303,6 +311,7 @@ try {
           .replace(/\\0.*$/, '');
         if (/^(E[1-4]M[1-9]|MAP[0-9][0-9])$/.test(name)) names.push(name);
       }
+      e._web_video(1706, 4);
       for (const map of names) {
         const digits = map.startsWith('MAP') ? map.slice(3) : map[1] + map[3];
         for (const char of 'idclev' + digits) key(char.charCodeAt(0));
@@ -315,9 +324,10 @@ try {
           throw Error('Warp/save did not reach ' + map);
         }
       }
+      e._web_video(320, 1);
       return names.length;
     })()`);
-    console.log(`PASS: rendered and saved all ${maps} maps`);
+    console.log(`PASS: rendered and saved all ${maps} maps at 1706×800`);
 
     await send('Page.navigate', {url});
     await until(() => evaluate('typeof Doom !== "undefined" && !Doom.engine'));

@@ -38,6 +38,12 @@ rcsid[] = "$Id: r_things.c,v 1.5 1997/02/03 16:47:56 b1 Exp $";
 #include "w_wad.h"
 
 #include "r_local.h"
+#ifdef WEB
+#include "render.h"
+#else
+#define WEB_LIGHT_WIDTH (viewwidth << detailshift)
+#define WEB_LIGHT_SCALE(x) (x)
+#endif
 
 #include "doomstat.h"
 
@@ -78,8 +84,8 @@ lighttable_t**	spritelights;
 
 // constant arrays
 //  used for psprite clipping and initializing clipping
-short		negonearray[SCREENWIDTH];
-short		screenheightarray[SCREENWIDTH];
+short		negonearray[R_MAXWIDTH];
+short		screenheightarray[R_MAXWIDTH];
 
 
 //
@@ -300,7 +306,7 @@ void R_InitSprites (char** namelist)
 {
     int		i;
 	
-    for (i=0 ; i<SCREENWIDTH ; i++)
+    for (i=0 ; i<R_MAXWIDTH ; i++)
     {
 	negonearray[i] = -1;
     }
@@ -499,7 +505,11 @@ void R_ProjectSprite (mobj_t* thing)
     tx = -(gyt+gxt); 
 
     // too far off the side?
+#ifdef WEB
+    if ((long long)abs(tx) > (long long)tz * 8)
+#else
     if (abs(tx)>(tz<<2))
+#endif
 	return;
     
     // decide which patch to use for sprite relative to player
@@ -594,7 +604,7 @@ void R_ProjectSprite (mobj_t* thing)
     else
     {
 	// diminished light
-	index = xscale>>(LIGHTSCALESHIFT-detailshift);
+	index = WEB_LIGHT_SCALE(xscale)>>(LIGHTSCALESHIFT-detailshift);
 
 	if (index >= MAXLIGHTSCALE) 
 	    index = MAXLIGHTSCALE-1;
@@ -842,8 +852,8 @@ void R_SortVisSprites (void)
 void R_DrawSprite (vissprite_t* spr)
 {
     drawseg_t*		ds;
-    short		clipbot[SCREENWIDTH];
-    short		cliptop[SCREENWIDTH];
+    short		clipbot[R_MAXWIDTH];
+    short		cliptop[R_MAXWIDTH];
     int			x;
     int			r1;
     int			r2;

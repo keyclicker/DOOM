@@ -33,6 +33,17 @@
 enum { VERSION =  110 };
 
 
+// Bound software-renderer storage independently of the 320x200 UI.
+#ifdef WEB
+#define R_MAXWIDTH 4096
+#define R_MAXHEIGHT 800
+#define PLANE_UNSET 0xffff
+#else
+#define R_MAXWIDTH SCREENWIDTH
+#define R_MAXHEIGHT SCREENHEIGHT
+#define PLANE_UNSET 0xff
+#endif
+
 // Game mode handling - identify IWAD version
 //  to handle IWAD dependend animations etc.
 typedef enum

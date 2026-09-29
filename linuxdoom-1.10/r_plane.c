@@ -37,6 +37,9 @@ rcsid[] = "$Id: r_plane.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 #include "doomstat.h"
 
 #include "r_local.h"
+#ifdef WEB
+#include "render.h"
+#endif
 #include "r_sky.h"
 
 
@@ -49,14 +52,18 @@ planefunction_t		ceilingfunc;
 //
 
 // Here comes the obnoxious "visplane".
-#define MAXVISPLANES	128
+#ifdef WEB
+#define MAXVISPLANES 256
+#else
+#define MAXVISPLANES 128
+#endif
 visplane_t		visplanes[MAXVISPLANES];
 visplane_t*		lastvisplane;
 visplane_t*		floorplane;
 visplane_t*		ceilingplane;
 
 // ?
-#define MAXOPENINGS	SCREENWIDTH*64
+#define MAXOPENINGS	R_MAXWIDTH*64
 short			openings[MAXOPENINGS];
 short*			lastopening;
 
@@ -66,15 +73,15 @@ short*			lastopening;
 //  floorclip starts out SCREENHEIGHT
 //  ceilingclip starts out -1
 //
-short			floorclip[SCREENWIDTH];
-short			ceilingclip[SCREENWIDTH];
+short			floorclip[R_MAXWIDTH];
+short			ceilingclip[R_MAXWIDTH];
 
 //
 // spanstart holds the start of a plane span
 // initialized to 0 at start
 //
-int			spanstart[SCREENHEIGHT];
-int			spanstop[SCREENHEIGHT];
+int			spanstart[R_MAXHEIGHT];
+int			spanstop[R_MAXHEIGHT];
 
 //
 // texture mapping
@@ -82,17 +89,27 @@ int			spanstop[SCREENHEIGHT];
 lighttable_t**		planezlight;
 fixed_t			planeheight;
 
-fixed_t			yslope[SCREENHEIGHT];
-fixed_t			distscale[SCREENWIDTH];
+fixed_t			yslope[R_MAXHEIGHT];
+fixed_t			distscale[R_MAXWIDTH];
 fixed_t			basexscale;
 fixed_t			baseyscale;
 
-fixed_t			cachedheight[SCREENHEIGHT];
-fixed_t			cacheddistance[SCREENHEIGHT];
-fixed_t			cachedxstep[SCREENHEIGHT];
-fixed_t			cachedystep[SCREENHEIGHT];
+fixed_t			cachedheight[R_MAXHEIGHT];
+fixed_t			cacheddistance[R_MAXHEIGHT];
+fixed_t			cachedxstep[R_MAXHEIGHT];
+fixed_t			cachedystep[R_MAXHEIGHT];
 
 
+
+/* Reserve clipping columns or fail before overflowing renderer storage. */
+short *R_AllocOpenings(int count)
+{
+    short *result = lastopening;
+    if (count < 0 || count > MAXOPENINGS - (lastopening - openings))
+        I_Error("R_AllocOpenings: no more clipping columns");
+    lastopening += count;
+    return result;
+}
 
 //
 // R_InitPlanes
@@ -204,8 +221,8 @@ void R_ClearPlanes (void)
     angle = (viewangle-ANG90)>>ANGLETOFINESHIFT;
 	
     // scale will be unit scale at SCREENWIDTH/2 distance
-    basexscale = FixedDiv (finecosine[angle],centerxfrac);
-    baseyscale = -FixedDiv (finesine[angle],centerxfrac);
+    basexscale = FixedDiv (finecosine[angle],projection);
+    baseyscale = -FixedDiv (finesine[angle],projection);
 }
 
 
@@ -250,10 +267,10 @@ R_FindPlane
     check->height = height;
     check->picnum = picnum;
     check->lightlevel = lightlevel;
-    check->minx = SCREENWIDTH;
+    check->minx = viewwidth;
     check->maxx = -1;
     
-    memset (check->top,0xff,sizeof(check->top));
+    memset(check->top, 0xff, viewwidth * sizeof(check->top[0]));
 		
     return check;
 }
@@ -297,7 +314,7 @@ R_CheckPlane
     }
 
     for (x=intrl ; x<= intrh ; x++)
-	if (pl->top[x] != 0xff)
+	if (pl->top[x] != PLANE_UNSET)
 	    break;
 
     if (x > intrh)
@@ -309,6 +326,9 @@ R_CheckPlane
 	return pl;		
     }
 	
+    if (lastvisplane - visplanes == MAXVISPLANES)
+	I_Error("R_CheckPlane: no more visplanes");
+
     // make a new visplane
     lastvisplane->height = pl->height;
     lastvisplane->picnum = pl->picnum;
@@ -318,7 +338,7 @@ R_CheckPlane
     pl->minx = start;
     pl->maxx = stop;
 
-    memset (pl->top,0xff,sizeof(pl->top));
+    memset(pl->top, 0xff, viewwidth * sizeof(pl->top[0]));
 		
     return pl;
 }
@@ -435,8 +455,8 @@ void R_DrawPlanes (void)
 
 	planezlight = zlight[light];
 
-	pl->top[pl->maxx+1] = 0xff;
-	pl->top[pl->minx-1] = 0xff;
+	pl->top[pl->maxx+1] = PLANE_UNSET;
+	pl->top[pl->minx-1] = PLANE_UNSET;
 		
 	stop = pl->maxx + 1;
 
