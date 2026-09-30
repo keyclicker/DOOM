@@ -851,24 +851,68 @@ void M_MusicVol(int choice)
 
 
 
-//
-// M_DrawMainMenu
-//
-void M_DrawMainMenu(void)
+/* Assemble "Extra" from the loaded IWAD's original menu lettering.
+ * These glyph rectangles match Doom and Doom II; no game art is bundled.
+ * Preserve column posts so the result uses the normal patch renderer.
+ */
+static patch_t *M_ExtraOptionsPatch(void)
 {
-    static char *labels[] = {"NEW GAME", "OPTIONS", "EXTRA OPTIONS",
-        "LOAD GAME", "SAVE GAME", "READ THIS!"};
-    int i, width = 0;
+    static patch_t *extra;
+    static const struct {
+        char *lump;
+        int first, width;
+    } letters[] = {
+        {"M_ENDGAM", 0, 16},     /* E */
+        {"M_SFXVOL", 28, 16},    /* x */
+        {"M_OPTION", 30, 11},    /* t */
+        {"M_SCRNSZ", 28, 15},    /* r */
+        {"M_SAVEG", 16, 14}      /* a */
+    };
+    const byte *post, *start;
+    int sizes[72], i, x, column = 0, size = 8 + 72 * 4;
+    patch_t *source;
+    byte *data;
 
-    V_DrawPatchDirect(94, 2, 0, W_CacheLumpName("M_DOOM", PU_CACHE));
-    for (i = 0; i < MainDef.numitems; i++)
-        if (M_StringWidth(labels[i]) > width) width = M_StringWidth(labels[i]);
-    MainDef.x = (320 - width) / 2;
-    for (i = 0; i < MainDef.numitems; i++)
-        M_WriteText(MainDef.x, MainDef.y + i * LINEHEIGHT, labels[i]);
+    if (extra) return extra;
+    for (i = 0; i < sizeof(letters) / sizeof(*letters); i++) {
+        source = W_CacheLumpName(letters[i].lump, PU_CACHE);
+        for (x = 0; x < letters[i].width; x++, column++) {
+            post = (byte *)source
+                + LONG(source->columnofs[letters[i].first + x]);
+            start = post;
+            while (post[0] != 255) post += post[1] + 4;
+            sizes[column] = post - start + 1;
+            size += sizes[column];
+        }
+    }
+    extra = Z_Malloc(size, PU_STATIC, NULL);
+    extra->width = SHORT(72);
+    extra->height = SHORT(15);
+    extra->leftoffset = extra->topoffset = 0;
+    data = (byte *)extra + 8 + 72 * 4;
+    column = 0;
+    for (i = 0; i < sizeof(letters) / sizeof(*letters); i++) {
+        source = W_CacheLumpName(letters[i].lump, PU_CACHE);
+        for (x = 0; x < letters[i].width; x++, column++) {
+            post = (byte *)source
+                + LONG(source->columnofs[letters[i].first + x]);
+            extra->columnofs[column] = LONG(data - (byte *)extra);
+            memcpy(data, post, sizes[column]);
+            data += sizes[column];
+        }
+    }
+    return extra;
 }
 
-
+/* Keep the original main-menu patches, including the new matching label. */
+void M_DrawMainMenu(void)
+{
+    int y = MainDef.y + extraoptions * LINEHEIGHT;
+    V_DrawPatchDirect(94, 2, 0, W_CacheLumpName("M_DOOM", PU_CACHE));
+    V_DrawPatchDirect(MainDef.x, y, 0, M_ExtraOptionsPatch());
+    V_DrawPatchDirect(MainDef.x + 80, y, 0,
+        W_CacheLumpName("M_OPTION", PU_CACHE));
+}
 
 
 //
@@ -958,32 +1002,22 @@ char    detailNames[2][9]	= {"M_GDHIGH","M_GDLOW"};
 char	msgNames[2][9]		= {"M_MSGOFF","M_MSGON"};
 
 
-/* Collapse the two legacy slider spacer rows in the compact Options page. */
-static int M_SettingsOptionY(int item)
-{
-    return 44 + LINEHEIGHT * (item - (item > option_empty1)
-        - (item > option_empty2));
-}
-
-/* Keep every option and its slider above the status bar, in one font. */
+/* Preserve the original Options artwork, values, and slider spacing. */
 void M_DrawOptions(void)
 {
-    static char *labels[] = {"END GAME", "MESSAGES", "GRAPHIC DETAIL",
-        "SCREEN SIZE", "", "MOUSE SENSITIVITY", "", "SOUND VOLUME"};
-    char *value;
-    int i;
+    V_DrawPatchDirect (108,15,0,W_CacheLumpName("M_OPTTTL",PU_CACHE));
 
-    V_DrawPatchDirect(108, 15, 0, W_CacheLumpName("M_OPTTTL", PU_CACHE));
-    for (i = 0; i < opt_end; i++)
-        if (OptionsMenu[i].status != -1)
-            M_WriteText(54, M_SettingsOptionY(i), labels[i]);
-    value = showMessages ? "ON" : "OFF";
-    M_WriteText(280 - M_StringWidth(value), M_SettingsOptionY(messages), value);
-    value = detailLevel ? "LOW" : "HIGH";
-    M_WriteText(280 - M_StringWidth(value), M_SettingsOptionY(detail), value);
-    M_DrawThermo(184, M_SettingsOptionY(mousesens) - 2, 10, mouseSensitivity);
-    M_DrawThermo(184, M_SettingsOptionY(scrnsize) - 2, 9, screenSize);
-    M_WriteText(54, 156, "ESC: BACK");
+    V_DrawPatchDirect (OptionsDef.x + 175,OptionsDef.y+LINEHEIGHT*detail,0,
+		       W_CacheLumpName(detailNames[detailLevel],PU_CACHE));
+
+    V_DrawPatchDirect (OptionsDef.x + 120,OptionsDef.y+LINEHEIGHT*messages,0,
+		       W_CacheLumpName(msgNames[showMessages],PU_CACHE));
+
+    M_DrawThermo(OptionsDef.x,OptionsDef.y+LINEHEIGHT*(mousesens+1),
+		 10,mouseSensitivity);
+
+    M_DrawThermo(OptionsDef.x,OptionsDef.y+LINEHEIGHT*(scrnsize+1),
+		 9,screenSize);
 }
 
 void M_Options(int choice)
@@ -2095,11 +2129,9 @@ void M_Drawer (void)
 	currentMenu->routine();         // call Draw routine
     
     /* The compact font needs a matching cursor, aligned with its actual rows. */
-    if (currentMenu == &MainDef || currentMenu == &OptionsDef
-        || currentMenu->routine == M_SettingsDraw) {
-        x = currentMenu == &OptionsDef ? 54 : currentMenu->x;
-        y = currentMenu == &OptionsDef ? M_SettingsOptionY(itemOn)
-            : currentMenu->y + itemOn * LINEHEIGHT;
+    if (currentMenu->routine == M_SettingsDraw) {
+        x = currentMenu->x;
+        y = currentMenu->y + itemOn * LINEHEIGHT;
         V_DrawHalfPatch(x - 20, y - 1,
             W_CacheLumpName(skullName[whichSkull], PU_CACHE));
         return;

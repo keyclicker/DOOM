@@ -24,12 +24,67 @@ export async function testMenu(evaluate, send) {
     const emulation = [1, 0, 0, 0, 0, 0, 1];
     const modern = [0, 1, 1, 0, 1, 1, 0];
 
+    Settings.value = Settings.validate(null);
+    Settings.apply();
+
     // Start actual gameplay so map actions and the status bar can be checked.
     e._web_tick(); key(27); page('n');
     if (!e.FS.analyzePath('/doom2.wad').exists) key(13);
     key(13);
     for (let i = 0; i < 80; i++) e._web_tick();
     check((e._web_state() & 15) === 0, 'New Game no longer starts a level');
+    // Compare menu patches with the original IWAD at their original positions.
+    const commercial = e.FS.analyzePath('/doom2.wad').exists;
+    const wad = e.FS.readFile('/' + e.FS.readdir('/')
+      .find(name => name.endsWith('.wad')));
+    const directory = new DataView(wad.buffer, wad.byteOffset);
+    const lumps = new Map();
+    for (let i = 0; i < directory.getInt32(4, true); i++) {
+      const at = directory.getInt32(8, true) + i * 16;
+      const name = new TextDecoder().decode(wad.subarray(at + 8, at + 16))
+        .replace(/\0.*$/, '');
+      lumps.set(name, directory.getInt32(at, true));
+    }
+    const patchMatches = (name, x, y) => {
+      const at = lumps.get(name);
+      check(at !== undefined, 'Missing menu patch ' + name);
+      const width = directory.getInt16(at, true);
+      x -= directory.getInt16(at + 4, true);
+      y -= directory.getInt16(at + 6, true);
+      const pixels = new Uint32Array(e.HEAPU8.buffer, e._web_pixels(), 64000);
+      const palette = new Uint32Array(e.HEAPU8.buffer, e._web_palette(), 256);
+      for (let col = 0; col < width; col++) {
+        let post = at + directory.getInt32(at + 8 + col * 4, true);
+        while (wad[post] !== 255) {
+          for (let row = 0; row < wad[post + 1]; row++) {
+            check(pixels[(y + wad[post] + row) * 320 + x + col]
+              === palette[wad[post + 3 + row]],
+              name + ' no longer uses its original artwork and position');
+          }
+          post += wad[post + 1] + 4;
+        }
+      }
+    };
+    key(27);
+    const mainY = commercial ? 72 : 64;
+    patchMatches('M_DOOM', 94, 2);
+    patchMatches('M_NGAME', 97, mainY);
+    patchMatches('M_OPTION', 97, mainY + 16);
+    patchMatches('M_OPTION', 177, mainY + 32);
+    patchMatches('M_LOADG', 97, mainY + 48);
+    patchMatches('M_SAVEG', 97, mainY + 64);
+    if (!commercial) patchMatches('M_RDTHIS', 97, mainY + 80);
+    page('o');
+    patchMatches('M_OPTTTL', 108, 15);
+    for (const [name, row] of [['M_ENDGAM', 0], ['M_MESSG', 1],
+      ['M_DETAIL', 2], ['M_SCRNSZ', 3], ['M_MSENS', 5], ['M_SVOL', 7]]) {
+      patchMatches(name, 60, 37 + row * 16);
+    }
+    patchMatches('M_GDHIGH', 235, 69);
+    patchMatches('M_MSGON', 180, 53);
+    patchMatches('M_THERML', 60, 101);
+    patchMatches('M_THERML', 60, 133);
+    close();
     key(196); // The removed F10 quit action must not open a confirmation.
     check(!(e._web_state() & 16), 'Quit shortcut is still active');
 
@@ -104,7 +159,8 @@ export async function testMenu(evaluate, send) {
     key(27); check(!(e._web_state() & 16), 'Escape did not resume play');
     Doom.menuTest = {key, page, close, extra};
   }.toString()})()`);
-  console.log('PASS: presentation presets, disabled rows, automap, key migration');
+  console.log('PASS: original menu artwork, presets, disabled rows, automap,'
+    + ' key migration');
 
   if (!process.env.DOOM_SCREENSHOTS) return;
   const game = await evaluate(

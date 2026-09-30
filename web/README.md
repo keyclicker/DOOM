@@ -142,9 +142,11 @@ and Keyboard pages use the game's font, skull cursor, sounds, and navigation.
 Use arrows to select or change an option, Enter to open a page or capture a
 binding, Escape or Backspace to go back one page. Escape at the main menu
 resumes play. Changes apply immediately.
-Main Menu, Options, and Extra Options use a compact font and cursor, with values
-aligned beside their labels. The default view fills the screen while keeping
-the status bar visible.
+Main Menu and Options retain their original artwork, full-size skull cursor,
+and spacing. The Extra Options entry combines lettering from the loaded
+IWAD with its Options patch, without bundling game assets. Extra Options
+pages use a compact font and cursor, with values aligned beside their labels.
+The default view fills the screen while keeping the status bar visible.
 
 The global preset applies presentation and keyboard choices together:
 
@@ -449,6 +451,8 @@ per short tap and the original continuous fire while Control remains held.
 
 Run `DOOM_MENU_ONLY=1 node tests/test.mjs /path/to/doom.wad` to check global
 presets, placeholder navigation, map rebinding, key migration, and Escape.
+It also compares Main Menu and Options pixels with the original IWAD patches
+at their original positions.
 With `DOOM_SCREENSHOTS=/tmp/menu`, it captures every page at classic 4:3,
 native Retina/WebGL, and native portrait/software sizes.
 
