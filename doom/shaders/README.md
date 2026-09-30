@@ -9,8 +9,6 @@ shaders/
   crt-pi/          upstream single-pass shader
   crt-easymode/    upstream single-pass shader
   crt-royale/      passes, local headers, preset, masks and license
-  import.py       reproduce the pinned upstream sources
-  sources.json    upstream revision, file paths and hashes
 ```
 
 WebGL programs, framebuffers and texture management live in `web/crt.js`
@@ -20,7 +18,15 @@ these directories add no runtime asset requests.
 The four upstream filters are pinned from
 [Libretro/glsl-shaders](https://github.com/libretro/glsl-shaders)
 at `f8e23ff880668f0f0e837a05a316534d82a7f31b`.
-`sources.json` records the upstream paths and SHA-256 digests.
+Sources are checked in; builds use these local copies. Source links below
+point to that exact commit:
+
+| Local filter | Upstream source |
+| --- | --- |
+| `crt-lottes/` | [CRT-Lottes](https://github.com/libretro/glsl-shaders/blob/f8e23ff880668f0f0e837a05a316534d82a7f31b/crt/shaders/crt-lottes.glsl) |
+| `crt-pi/` | [CRT-Pi](https://github.com/libretro/glsl-shaders/blob/f8e23ff880668f0f0e837a05a316534d82a7f31b/crt/shaders/crt-pi.glsl) |
+| `crt-easymode/` | [CRT-Easymode](https://github.com/libretro/glsl-shaders/blob/f8e23ff880668f0f0e837a05a316534d82a7f31b/crt/shaders/crt-easymode.glsl) |
+| `crt-royale/` | [Preset](https://github.com/libretro/glsl-shaders/blob/f8e23ff880668f0f0e837a05a316534d82a7f31b/crt/crt-royale.glslp), [passes, masks and license](https://github.com/libretro/glsl-shaders/tree/f8e23ff880668f0f0e837a05a316534d82a7f31b/crt/shaders/crt-royale), [blur helpers](https://github.com/libretro/glsl-shaders/tree/f8e23ff880668f0f0e837a05a316534d82a7f31b/blurs/shaders/royale) |
 
 - Clean CRT: original project shader, GPL-2.0-only.
 - CRT-Lottes: Timothy Lottes, public domain.
@@ -37,9 +43,8 @@ Public contact addresses are omitted, with copyright names, years and notices
 retained. Trailing whitespace is trimmed. No game textures or WAD data are
 included.
 
-Run `python3 doom/shaders/import.py` to reproduce this import. It downloads
-only the pinned revision and verifies every upstream digest before writing.
-Ordinary builds require no network access.
+Update the checked-in sources and the pinned links together when changing
+upstream revisions. Builds require no network access.
 
 ## WebGL adaptation
 

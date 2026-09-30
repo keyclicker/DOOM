@@ -126,10 +126,11 @@ These are longstanding community choices, not a ranked benchmark. See the
 [Libretro shader guide](https://docs.libretro.com/shader/crt/) and the
 [community's favorite-shader discussion](https://forums.libretro.com/t/what-is-your-favorite-crt-shader/2426).
 The upstream GLSL, Royale preset and phosphor masks are pinned in
-[`shaders/<shader-name>`](../shaders/README.md), with authors, licenses and a
-reproducible import manifest. `pack_shaders.py` adapts their legacy GLSL to WebGL 2 at build
-time, removes unused helper functions, and embeds compressed source and masks
-in the HTML. Browser APIs decode them locally; no CDN or runtime assets are used.
+[`shaders/<shader-name>`](../shaders/README.md), with authors, licenses and
+source links pinned to an upstream commit. `pack_shaders.py` adapts their
+legacy GLSL to WebGL 2 at build time, removes unused helper functions, and
+embeds compressed source and masks in the HTML. Browser APIs decode them
+locally; no CDN or runtime assets are used.
 
 `crt-presets.js` compiles only the selected shader. Lottes, CRT-Pi and Easymode
 each use one pass. Royale runs its full 12-pass pipeline: scanline reconstruction,
