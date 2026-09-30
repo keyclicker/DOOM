@@ -22,7 +22,7 @@ EM_JS(void, web_world_geometry, (const render_vertex_t *vertices, int count,
     if (Doom.graphics.failed || Doom.graphics.lost) return;
     try {
         Doom.graphics.world(new Float32Array(HEAPU8.buffer,
-            vertices, (count + occluders + sprites + shadows + weapons) * 8),
+            vertices, (count + occluders + sprites + shadows + weapons) * 9),
             count, occluders, sprites, shadows, weapons,
             new Float32Array(HEAPU8.buffer, camera, 14));
     } catch (error) {

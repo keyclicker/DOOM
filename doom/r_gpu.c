@@ -399,6 +399,8 @@ static void plane(int index, int ceiling)
         for (j = 0; j < 3; j++) {
             p = poly->points[j == 0 ? 0 : j == 1 ? i : i + 1];
             vertex(p.x, p.y, z, p.x, -p.y, mat->id, light);
+            if (!ceiling && pic != skyflatnum)
+                vertices[vertex_count - 1].sector = sector - sectors + 1;
         }
     }
 }
@@ -464,8 +466,10 @@ static void sprite(mobj_t *thing)
         flip ? mat->width : 0, flip ? 0 : mat->width, 0, mat->height,
         mat->id, light);
     /* Use the interpolated plane, not the simulation's cached floorz. */
-    for (; first < vertex_count; first++)
+    for (; first < vertex_count; first++) {
         vertices[first].floor = units(thing->subsector->sector->floorheight);
+        vertices[first].sector = thing->subsector->sector - sectors + 1;
+    }
 }
 
 /* Use the same psprite offsets and projection, independent of camera pitch. */
