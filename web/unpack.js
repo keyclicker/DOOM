@@ -47,23 +47,33 @@ function decodeBase122(element) {
       new Blob([packed]).stream());
     const buffer = await new Response(stream).arrayBuffer();
     const header = new DataView(buffer);
-    if (buffer.byteLength < 20 || header.getUint32(0) !== 0x44504b31) {
+    if (buffer.byteLength < 8 || header.getUint32(0) !== 0x44504b32) {
       throw Error('Invalid DOOM bundle');
     }
-    let offset = 20;
+    const count = header.getUint32(4, true);
+    let offset = 8 + count * 4;
+    if (count < 4 || offset > buffer.byteLength) {
+      throw Error('Invalid DOOM bundle directory');
+    }
     const parts = [];
-    for (let i = 0; i < 4; i++) {
-      const size = header.getUint32(4 + i * 4, true);
+    for (let i = 0; i < count; i++) {
+      const size = header.getUint32(8 + i * 4, true);
       if (offset + size > buffer.byteLength) throw Error('Truncated DOOM bundle');
       parts.push(new Uint8Array(buffer, offset, size));
       offset += size;
     }
     if (offset !== buffer.byteLength) throw Error('Invalid DOOM bundle length');
 
+    const titles = JSON.parse(new TextDecoder().decode(parts[3]));
+    if (!Array.isArray(titles) || titles.length !== count - 4
+        || titles.some(title => typeof title !== 'string')) {
+      throw Error('Invalid WAD collection');
+    }
+
     // Copy small modules so they do not retain the entire unpacked archive.
     globalThis.doomBundle = {
       engine: parts[1].slice(), music: parts[2].slice(),
-      wad: parts[3].length ? new Blob([parts[3]]) : null,
+      wads: titles.map((title, i) => ({title, file: new Blob([parts[i + 4]])})),
     };
     const html = new TextDecoder().decode(parts[0]);
     delete globalThis['xz-decompress'];

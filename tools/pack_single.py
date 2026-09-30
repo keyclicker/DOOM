@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build an offline HTML from local modules; optionally embed a private IWAD."""
+"""Build an offline HTML from local modules; optionally embed private IWADs."""
 
 import argparse
 import gzip
 import hashlib
+import json
 import lzma
 from pathlib import Path
 import struct
@@ -64,12 +65,14 @@ def zopfli(data):
 
 def compress(data):
     """Try LZMA2 contexts for mixed code/art, retaining the smallest stream."""
+    # Grow the shared match window with the collection, capped for browsers.
+    dictionary = 1 << min(26, max(24, (len(data) - 1).bit_length()))
     best = None
     for lc in (3, 4):
         for pb in (0, 1, 2):
             filters = [{'id': lzma.FILTER_LZMA2,
                         'preset': 9 | lzma.PRESET_EXTREME,
-                        'dict_size': 16 << 20, 'lc': lc, 'lp': 0, 'pb': pb,
+                        'dict_size': dictionary, 'lc': lc, 'lp': 0, 'pb': pb,
                         'nice_len': 273, 'depth': 1000000}]
             candidate = lzma.compress(data, check=lzma.CHECK_CRC32,
                                       filters=filters)
@@ -103,12 +106,17 @@ def read_wad(path):
 
 
 def main():
-    """Produce DOOM.html and a deterministic gzip companion, outside sources."""
+    """Pack one named HTML and its deterministic gzip companion."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('build', type=Path, help='directory with built WASM/JS')
-    parser.add_argument('--wad', type=Path, help='embed this local IWAD')
+    parser.add_argument('--output', type=Path, required=True,
+                        help='destination HTML, outside tracked sources')
+    parser.add_argument('--wad', type=Path, action='append', default=[],
+                        help='embed a local IWAD; repeat for a collection')
     args = parser.parse_args()
-    wad = read_wad(args.wad) if args.wad else b''
+    wads = [read_wad(path) for path in args.wad]
+    titles = {'doom': 'DOOM', 'doom1': 'DOOM', 'doom2': 'DOOM II'}
+    names = [titles.get(path.stem.lower(), path.stem) for path in args.wad]
     library = WEB.parent / 'lib/xz-decompress'
     decoder = (library / 'xz-decompress.min.js').read_bytes()
     if hashlib.sha256(decoder).hexdigest() != DECODER_SHA256:
@@ -117,10 +125,13 @@ def main():
 
     parts = [page(args.build, compact=True).encode('utf-8'),
              (args.build / 'doom.wasm').read_bytes(),
-             (args.build / 'music.wasm').read_bytes(), wad]
-    payload = b'DPK1' + struct.pack('<4I', *(len(part) for part in parts))
+             (args.build / 'music.wasm').read_bytes(),
+             json.dumps(names, ensure_ascii=False).encode('utf-8'), *wads]
+    payload = b'DPK2' + struct.pack('<I', len(parts))
+    payload += struct.pack(f'<{len(parts)}I', *(len(part) for part in parts))
     payload += b''.join(parts)
-    print(f'Payload: {len(payload):,} bytes; WAD: {len(wad):,}', flush=True)
+    print(f'Payload: {len(payload):,} bytes; '
+          f'WADs: {sum(map(len, wads)):,}', flush=True)
     packed = compress(payload)
     bootstrap = subprocess.run(
         ['terser', str(WEB / 'unpack.js'), '--compress', 'passes=3', '--mangle'],
@@ -132,14 +143,15 @@ def main():
             + element('decoder', zopfli(decoder))
             + element('payload', packed)
             + b'<script>' + bootstrap + b'</script></html>')
-    out = args.build / ('single-wad' if args.wad else 'single')
-    out.mkdir(parents=True, exist_ok=True)
-    (out / 'DOOM.html').write_bytes(html)
-    print(f'{out / "DOOM.html"}: {len(html):,} bytes '
+    out = args.output
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(html)
+    print(f'{out}: {len(html):,} bytes '
           f'({len(html) / 1048576:.3f} MiB)', flush=True)
     gzipped = zopfli(html)
-    (out / 'DOOM.html.gz').write_bytes(gzipped)
-    print(f'{out / "DOOM.html.gz"}: {len(gzipped):,} bytes '
+    gzip_out = out.with_suffix(out.suffix + '.gz')
+    gzip_out.write_bytes(gzipped)
+    print(f'{gzip_out}: {len(gzipped):,} bytes '
           f'({len(gzipped) / 1048576:.3f} MiB)', flush=True)
 
 
