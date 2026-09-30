@@ -33,6 +33,7 @@ void Web_RenderView(player_t *player);
 
 /* Composite legacy patches and copied spans into the variable framebuffer. */
 void Web_DrawPatch(int x, int y, patch_t *patch, int flipped);
+void Web_DrawHalfPatch(int x, int y, patch_t *patch);
 void Web_CopyPixels(int offset, int count);
 void Web_CopyBorder(int offset, int count);
 void Web_BlitScreen(void);

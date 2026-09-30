@@ -63,8 +63,11 @@ removes them. Reload the page to choose another WAD after quitting.
 Open **Options → Settings** in Doom's menu. Video, Performance, and Keyboard
 pages use the game's font, skull cursor, sounds, and keyboard navigation.
 Use arrows to select or change an option, Enter to open a page or capture a
-binding, Backspace to go back, and Escape to close. Changes apply immediately.
-The default view fills the screen while keeping the status bar visible.
+binding, Escape or Backspace to go back one page. Escape at the main menu
+resumes play. Changes apply immediately.
+Options and settings use a compact font and cursor, with sliders and values
+aligned beside their labels. The default view fills the screen while keeping
+the status bar visible.
 
 - **Video:** actual software rendering at 320×200, 640×400, 960×600, or
   1280×800, 1600×1000, or 1920×1200. **Native** follows the displayed canvas's
@@ -162,9 +165,9 @@ Representative builds with Emscripten 6.0.9:
 | File | Raw | Gzip |
 | --- | ---: | ---: |
 | `index.html` | 85 KB | 25 KB |
-| `doom.wasm` | 304 KB | 143 KB |
+| `doom.wasm` | 305 KB | 143 KB |
 | `music.wasm` | 26 KB | 10 KB |
-| Total | 415 KB | 177 KB |
+| Total | 416 KB | 177 KB |
 
 The build prints exact raw and gzip sizes; compressed sizes require HTTP
 compression by the hosting server. Music adds about 11 KB compressed,
