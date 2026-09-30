@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {writeFile} from 'node:fs/promises';
 import {testSprites} from './test-sprites.mjs';
+import {testHiddenActors} from './test-hidden-actors.mjs';
 
 /** Check rendering, native options, pitch, transitions and context recovery. */
 export async function testRenderer(evaluate, send) {
@@ -107,6 +108,7 @@ export async function testRenderer(evaluate, send) {
   }.toString()})()`);
   console.log('PASS: GPU options, pitch, interpolation, HUD, switching', setup);
   await testSprites(evaluate);
+  await testHiddenActors(evaluate);
 
   if (process.env.DOOM_SCREENSHOTS) {
     await evaluate('Doom.gpuTest.video(); Doom.gpuTest.render()');
