@@ -14,7 +14,7 @@ import {join, resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
-const root = fileURLToPath(new URL('../build/web/', import.meta.url));
+const root = fileURLToPath(new URL('../build/', import.meta.url));
 const wadPaths = process.argv.slice(2).map(p => resolve(p));
 assert(wadPaths.length, 'Pass one or more original IWAD paths.');
 let wadPath = wadPaths[0];

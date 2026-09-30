@@ -38,14 +38,9 @@ static const char rcsid[] = "$Id: r_main.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #include "m_bbox.h"
 
 #include "r_local.h"
-#ifdef VARIABLE_VIDEO
 #include "r_view.h"
 #include "v_view.h"
 #include "r_interp.h"
-#else
-#define R_LIGHT_WIDTH (viewwidth << detailshift)
-#define R_LIGHT_SCALE(x) (x)
-#endif
 #include "r_sky.h"
 
 
@@ -469,9 +464,7 @@ fixed_t R_ScaleFromGlobalAngle (angle_t visangle)
     fixed_t		num;
     int			den;
 
-#ifdef VARIABLE_VIDEO
     maxscale = (int64_t)maxscale * vid_height / 200;
-#endif
     // UNUSED
 #if 0
 {
@@ -495,11 +488,7 @@ fixed_t R_ScaleFromGlobalAngle (angle_t visangle)
     // both sines are allways positive
     sinea = finesine[anglea>>ANGLETOFINESHIFT];	
     sineb = finesine[angleb>>ANGLETOFINESHIFT];
-#ifdef VARIABLE_VIDEO
     num = FixedMul(projectiony, sineb) << detailshift;
-#else
-    num = FixedMul(projection,sineb)<<detailshift;
-#endif
     den = FixedMul(rw_distance,sinea);
 
     if (den > num>>16)
@@ -706,9 +695,7 @@ void R_ExecuteSetViewSize (void)
 	viewheight = (setblocks*168/10)&~7;
     }
     
-#ifdef VARIABLE_VIDEO
     R_SizeView();
-#endif
     detailshift = setdetail;
     viewwidth = scaledviewwidth>>detailshift;
 	
@@ -717,9 +704,7 @@ void R_ExecuteSetViewSize (void)
     centerxfrac = centerx<<FRACBITS;
     centeryfrac = centery<<FRACBITS;
     projection = centerxfrac;
-#ifdef VARIABLE_VIDEO
     projection = R_Projection();
-#endif
 
     if (!detailshift)
     {
@@ -753,11 +738,7 @@ void R_ExecuteSetViewSize (void)
     {
 	dy = ((i-viewheight/2)<<FRACBITS)+FRACUNIT/2;
 	dy = abs(dy);
-#ifdef VARIABLE_VIDEO
         yslope[i] = FixedDiv(projectiony << detailshift, dy);
-#else
-	yslope[i] = FixedDiv ( projection<<detailshift, dy);
-#endif
     }
 	
     for (i=0 ; i<viewwidth ; i++)
@@ -784,9 +765,7 @@ void R_ExecuteSetViewSize (void)
 	    scalelight[i][j] = colormaps + level*256;
 	}
     }
-#ifdef VARIABLE_VIDEO
     R_SaveView();
-#endif
 }
 
 
@@ -867,9 +846,7 @@ void R_SetupFrame (player_t* player)
     extralight = player->extralight;
 
     viewz = player->viewz;
-#ifdef VARIABLE_VIDEO
     R_InterpolateCamera(player);
-#endif
     
     viewsin = finesine[viewangle>>ANGLETOFINESHIFT];
     viewcos = finecosine[viewangle>>ANGLETOFINESHIFT];

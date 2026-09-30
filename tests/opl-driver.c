@@ -6,7 +6,7 @@
 #ifdef OPL_REFERENCE
 #include "opl3.h"
 #else
-#include "vendor/nuked-opl3/opl3.h"
+#include "lib/nuked-opl3/opl3.h"
 #endif
 
 /* Capture ordered writes from either driver without changing the emulator. */

@@ -16,7 +16,6 @@ extern int v_ui_height;
 enum { V_UI_CENTER, V_UI_BOTTOM, V_UI_TOP };
 extern int v_ui_anchor;
 
-#ifdef HARDWARE_RENDER
 /* Four indexed artwork layers: low byte = color, upper bits = paint order. */
 enum { V_UI_BORDER = 3, V_UI_LAYERS };
 extern uint32_t v_overlay[V_UI_LAYERS][320 * 200];
@@ -27,7 +26,6 @@ typedef struct {
 extern v_overlay_layout_t v_overlay_layout;
 /* Clear logical coverage and paint order before an accelerated frame. */
 void V_BeginOverlay(void);
-#endif
 
 /* Original tiled backdrop shared by software and accelerated composition. */
 byte *V_BackgroundFlat(void);

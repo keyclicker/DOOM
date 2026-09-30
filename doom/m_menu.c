@@ -62,10 +62,8 @@ rcsid[] = "$Id: m_menu.c,v 1.7 1997/02/03 22:45:10 b1 Exp $";
 #include "sounds.h"
 
 #include "m_menu.h"
-#ifdef EXTENDED_MENU
 #include "m_settings.h"
 #include "v_view.h"
-#endif
 
 
 
@@ -217,9 +215,7 @@ void M_DrawReadThis2(void);
 void M_DrawNewGame(void);
 void M_DrawEpisode(void);
 void M_DrawOptions(void);
-#ifdef EXTENDED_MENU
 static void M_SettingsSettings(int choice);
-#endif
 void M_DrawSound(void);
 void M_DrawLoad(void);
 void M_DrawSave(void);
@@ -353,9 +349,7 @@ enum
     mousesens,
     option_empty2,
     soundvol,
-#ifdef EXTENDED_MENU
     settings,
-#endif
     opt_end
 } options_e;
 
@@ -369,9 +363,7 @@ menuitem_t OptionsMenu[]=
     {2,"M_MSENS",	M_ChangeSensitivity,'m'},
     {-1,"",0},
     {1,"M_SVOL",	M_Sound,'s'},
-#ifdef EXTENDED_MENU
     {1,"", M_SettingsSettings,'t'}
-#endif
 };
 
 menu_t  OptionsDef =
@@ -961,7 +953,6 @@ char    detailNames[2][9]	= {"M_GDHIGH","M_GDLOW"};
 char	msgNames[2][9]		= {"M_MSGOFF","M_MSGON"};
 
 
-#ifdef EXTENDED_MENU
 /* Collapse the two legacy slider spacer rows in the compact Options page. */
 static int M_SettingsOptionY(int item)
 {
@@ -990,24 +981,6 @@ void M_DrawOptions(void)
     M_DrawThermo(184, M_SettingsOptionY(scrnsize) - 2, 9, screenSize);
     M_WriteText(54, 156, "ESC: BACK");
 }
-#else
-void M_DrawOptions(void)
-{
-    V_DrawPatchDirect (108,15,0,W_CacheLumpName("M_OPTTTL",PU_CACHE));
-	
-    V_DrawPatchDirect (OptionsDef.x + 175,OptionsDef.y+LINEHEIGHT*detail,0,
-		       W_CacheLumpName(detailNames[detailLevel],PU_CACHE));
-
-    V_DrawPatchDirect (OptionsDef.x + 120,OptionsDef.y+LINEHEIGHT*messages,0,
-		       W_CacheLumpName(msgNames[showMessages],PU_CACHE));
-
-    M_DrawThermo(OptionsDef.x,OptionsDef.y+LINEHEIGHT*(mousesens+1),
-		 10,mouseSensitivity);
-	
-    M_DrawThermo(OptionsDef.x,OptionsDef.y+LINEHEIGHT*(scrnsize+1),
-		 9,screenSize);
-}
-#endif
 
 void M_Options(int choice)
 {
@@ -1177,23 +1150,9 @@ void M_ChangeDetail(int choice)
     choice = 0;
     detailLevel = 1 - detailLevel;
 
-#ifdef EXTENDED_MENU
     R_SetViewSize(screenblocks, detailLevel);
     players[consoleplayer].message = detailLevel ? DETAILLO : DETAILHI;
-    return;
-#endif
 
-    // FIXME - does not work. Remove anyway?
-    fprintf( stderr, "M_ChangeDetail: low detail mode n.a.\n");
-
-    return;
-    
-    /*R_SetViewSize (screenblocks, detailLevel);
-
-    if (!detailLevel)
-	players[consoleplayer].message = DETAILHI;
-    else
-	players[consoleplayer].message = DETAILLO;*/
 }
 
 
@@ -1390,7 +1349,6 @@ M_WriteText
 
 
 
-#ifdef EXTENDED_MENU
 /* Native settings share Doom's menu navigation, font, cursor, and sounds. */
 static void M_SettingsPage(int choice);
 static void M_SettingsDraw(void);
@@ -1411,10 +1369,8 @@ static menu_t SettingsMenu = {
 };
 static menuitem_t SettingsVideoItems[] = {
     {2, "", M_SettingsVideo, 'r'}, {2, "", M_SettingsVideo, 'a'},
-#ifdef HARDWARE_RENDER
     {2, "", M_SettingsVideo, 'e'}, {2, "", M_SettingsVideo, 'f'},
     {2, "", M_SettingsVideo, 'c'}
-#endif
 };
 static menu_t SettingsVideoMenu = {
     sizeof(SettingsVideoItems) / sizeof(*SettingsVideoItems),
@@ -1546,12 +1502,10 @@ static void M_SettingsDraw(void)
         M_SettingsLayout(video, currentMenu->numitems, "1920X1200");
         M_SettingsRow(0, video[0], resolutions[m_resolution]);
         M_SettingsRow(1, video[1], m_aspect ? "BROWSER" : "4:3");
-#ifdef HARDWARE_RENDER
         M_SettingsRow(2, video[2], m_renderer ? "WEBGL" : "SOFTWARE");
         M_SettingsRow(3, video[3], !m_renderer ? "N/A"
             : m_freelook ? "ON" : "OFF");
         M_SettingsRow(4, video[4], crt[m_crt]);
-#endif
         sprintf(dimensions, "%d X %d", vid_width, vid_height);
         M_WriteText((320 - M_StringWidth(dimensions)) / 2, 136, dimensions);
         if (m_gpu_failed || m_crt_failed) {
@@ -1701,7 +1655,6 @@ void M_DrawFPS(void)
     M_WriteText(318 - M_StringWidth(text), 2, text);
     v_ui_anchor = V_UI_CENTER;
 }
-#endif
 
 //
 // CONTROL PANEL
@@ -1722,9 +1675,7 @@ boolean M_Responder (event_t* ev)
     static  int     lastx = 0;
 	
     ch = -1;
-#ifdef EXTENDED_MENU
     if (settings_capture >= 0) return M_SettingsCapture(ev);
-#endif
 	
     if (ev->type == ev_joystick && joywait < I_GetTime())
     {
@@ -2045,14 +1996,12 @@ boolean M_Responder (event_t* ev)
 	return true;
 		
       case KEY_ESCAPE:
-#ifdef EXTENDED_MENU
         if (currentMenu->prevMenu) {
             currentMenu->lastOn = itemOn;
             M_SetupNextMenu(currentMenu->prevMenu);
             S_StartSound(NULL, sfx_swtchn);
             return true;
         }
-#endif
 	currentMenu->lastOn = itemOn;
 	M_ClearMenus ();
 	S_StartSound(NULL,sfx_swtchx);
@@ -2159,7 +2108,6 @@ void M_Drawer (void)
     if (currentMenu->routine)
 	currentMenu->routine();         // call Draw routine
     
-#ifdef EXTENDED_MENU
     /* The compact font needs a matching cursor, aligned with its actual rows. */
     if (currentMenu == &OptionsDef || currentMenu->routine == M_SettingsDraw) {
         x = currentMenu == &OptionsDef ? 54 : currentMenu->x;
@@ -2169,7 +2117,6 @@ void M_Drawer (void)
             W_CacheLumpName(skullName[whichSkull], PU_CACHE));
         return;
     }
-#endif
     // DRAW MENU
     x = currentMenu->x;
     y = currentMenu->y;

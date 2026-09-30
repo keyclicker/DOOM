@@ -1,9 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include <string.h>
 #include "doomstat.h"
-#ifdef HARDWARE_RENDER
 #include "r_gpu.h"
-#endif
 #include "d_main.h"
 #include "d_frame.h"
 #include "i_video.h"
@@ -73,9 +71,7 @@ void I_FinishUpdate(void)
 {
     int i;
     byte *source = screens[0];
-#ifdef HARDWARE_RENDER
     if (r_hardware_frame && !d_wiping) return;
-#endif
     if (vid_width != 320 || vid_height != 200 || vid_square_pixels) {
         if (gamestate != GS_LEVEL || automapactive || d_wiping)
             V_BlitView();

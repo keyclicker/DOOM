@@ -1,12 +1,12 @@
 /* MUS sequencer and GENMIDI. SPDX-License-Identifier: GPL-2.0-only
  * Adapted from Chocolate Doom's Doom 1.9 OPL driver and MUS converter.
  * Copyright (C) 1993-1996 Id Software, Inc.; 2005-2014 Simon Howard;
- * 2006 Ben Ryves. Source revisions: vendor/README.md.
+ * 2006 Ben Ryves. Source revisions: lib/README.md.
  */
 #include <stdint.h>
 #include <string.h>
 #include "s_opl.h"
-#include "vendor/nuked-opl3/opl3.h"
+#include "lib/nuked-opl3/opl3.h"
 #include "s_opltables.h"
 
 /* Fixed buffers keep the audio callback allocation-free. */

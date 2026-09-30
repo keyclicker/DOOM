@@ -10,15 +10,15 @@ Requires GNU Make 4.3+, Python 3, a C preprocessor (`cpp`), and Emscripten
 (`emcc` on PATH). Tested with Emscripten 6.0.9.
 
 ```sh
-make -C doom PLATFORM=web
-python3 -m http.server 8000 --directory doom/build/web
+make
+python3 -m http.server 8000 --directory build
 ```
 
 Open `http://localhost:8000`, choose or drop a Doom IWAD, then click the game
 to capture the mouse and enter fullscreen. The page also requests fullscreen
 when a user selects a file; browsers may require the additional click.
 
-Deploy **`index.html`, `doom.wasm`, and `music.wasm`** from `doom/build/web` side by side
+Deploy **`index.html`, `doom.wasm`, and `music.wasm`** from `build` side by side
 on any static HTTPS server. Localhost HTTP also works. Opening the HTML
 directly with `file://` does not work because browsers restrict WASM fetching.
 WADs are read locally and never uploaded or automatically fetched. The optional
@@ -36,17 +36,17 @@ module; no package installation or network access happens during packaging.
 
 ```sh
 # Distributable: the player selects their own WAD.
-make -C doom single
+make single
 
 # Private: includes exactly this local IWAD. Do not redistribute game data.
-make -C doom single-wad WAD=/absolute/path/to/DOOM.WAD
+make single-wad WAD=/absolute/path/to/DOOM.WAD
 ```
 
-Outputs are `doom/build/web/single/DOOM.html` and
-`doom/build/web/single-wad/DOOM.html`, respectively. Each directory also gets
+Outputs are `build/single/DOOM.html` and
+`build/single-wad/DOOM.html`, respectively. Each directory also gets
 `DOOM.html.gz`. Both targets preserve all renderers, CRT filters, music, saves,
 and settings. Software rendering and the original settings remain the defaults.
-The ordinary three-file build remains available through `make -C doom`.
+The ordinary three-file build remains available through `make`.
 
 Open **DOOM.html directly**, including offline with `file://`. The private build
 shows **Play DOOM** instead of the WAD picker. A click starts audio and requests
@@ -60,7 +60,7 @@ Decompress it before opening locally. Serve the plain HTML as UTF-8 without
 transcoding or HTML minification: its Base122 attributes contain significant
 control characters. Editing the generated file as text can corrupt the payload.
 
-`pack_single.py` minifies JavaScript, then compresses the HTML, raw shader data,
+`tools/pack_single.py` minifies JavaScript, then compresses the HTML, raw shader data,
 both WASM modules, and optional WAD together with XZ. Six LZMA2 context choices
 are tried at the extreme preset with a 16 MiB dictionary and a deep match
 search; the smallest wins. Base122 adds about 14.3% instead of Base64's 33.3%.
@@ -71,17 +71,17 @@ length-prefixed archive avoids a general-purpose ZIP/tar library. Binary bytes
 are verified after compression; XZ also checks CRC32 during browser startup.
 
 The XZ decoder is pinned locally in
-[`vendor/xz-decompress`](../vendor/xz-decompress/README.md). Its source and license
+[`lib/xz-decompress`](../lib/xz-decompress/README.md). Its source and license
 notices ship in the HTML. The generated artifacts and WADs are ignored by Git.
 Never publish the `single-wad` output as a project release.
 
 Run the existing gameplay/music/save tests against either local HTML:
 
 ```sh
-DOOM_HTML=doom/build/web/single/DOOM.html \
-  node doom/web/test.mjs /path/to/DOOM.WAD
-DOOM_HTML=doom/build/web/single-wad/DOOM.html \
-  node doom/web/test.mjs /path/to/the/same/DOOM.WAD
+DOOM_HTML=build/single/DOOM.html \
+  node tests/test.mjs /path/to/DOOM.WAD
+DOOM_HTML=build/single-wad/DOOM.html \
+  node tests/test.mjs /path/to/the/same/DOOM.WAD
 ```
 
 `DOOM_PRESETS_ONLY=1` selects the CRT suite instead. The harness drives the real
@@ -187,7 +187,7 @@ These are longstanding community choices, not a ranked benchmark. See the
 [community's favorite-shader discussion](https://forums.libretro.com/t/what-is-your-favorite-crt-shader/2426).
 The upstream GLSL, Royale preset and phosphor masks are pinned in
 [`shaders/<shader-name>`](../shaders/README.md), with authors, licenses and
-source links pinned to an upstream commit. `pack_shaders.py` adapts their
+source links pinned to an upstream commit. `tools/pack_shaders.py` adapts their
 legacy GLSL to WebGL 2 at build time, removes unused helper functions, and
 embeds compressed source and masks in the HTML. Browser APIs decode them
 locally; no CDN or runtime assets are used.
@@ -228,8 +228,8 @@ measurement on the target device, not the test VM's SwiftShader.
 
 ## Port boundary
 
-- `web/i_*.c` implements the same platform interfaces as `linux/i_*.c` for browser
-  input, RGBA output, Web Audio sound effects, and single-player transport.
+- `doom/i_*.c` implements browser input, RGBA output, Web Audio sound
+  effects, and single-player transport through Doom's original interfaces.
 - `app.js` loads the WAD into Emscripten's memory filesystem, schedules the
   original 35 Hz simulation, presents the selected framebuffer, and
   persists Doom's native save files. A long frame catches up at most 250 ms.
@@ -251,7 +251,7 @@ measurement on the target device, not the test VM's SwiftShader.
   position instead of lifting actors. A depth-only solid-wall silhouette pass
   keeps hidden feet behind walls and closed doors. Higher floors still occlude
   sprites; weapons and ordinary world depth testing are unchanged.
-- `web/i_render.c` implements `i_render.h`; `render.js` submits triangles
+- `doom/i_render.c` implements `i_render.h`; `render.js` submits triangles
   directly to WebGL 2. Indexed texture and COLORMAP lookups retain the WAD's
   palette, gamma, damage flashes and power-up colors. The native status bar,
   menus and text stay in four 320×200 indexed layers (center, bottom, top,
@@ -276,10 +276,9 @@ measurement on the target device, not the test VM's SwiftShader.
   runs it on the audio thread, so rendering stalls do not interrupt music.
   The worklet source is inlined in the HTML; `music.wasm` has no imports.
 - `d_frame.c` advances simulation and the original melt wipe over host frames.
-  `EXTERNAL_LOOP` makes `d_main.c` return to its host and leaves tic creation
-  to `D_AdvanceFrame`.
-- `platform.mk` selects engine features and builds both WASM modules;
-  `pack.py` only inlines the scripts. The Unix sound server is Linux-only.
+  `d_main.c` returns to the browser; `D_AdvanceFrame` creates game tics.
+- The root `Makefile` builds both WASM modules; `tools/pack.py` inlines
+  the scripts and shaders.
   `w_wad.c` makes its uppercase helper private to avoid a libc name collision.
 - `st_stuff.c` fixes an upstream Doom II warp-cheat bug: it assigned episode
   zero, then rejected every episode below one. Doom II uses episode one.
@@ -315,7 +314,7 @@ storage has bounded headroom for wider views; allocation checks precede writes.
 ## Size and performance
 
 The default is `-Oz` with link-time optimization and `emmalloc`. Override with
-`make -C doom PLATFORM=web OPT=-O2` after cleaning that target to favor
+`make OPT=-O2` after cleaning that target to favor
 execution speed. There is no Asyncify,
 thread pool, GL compatibility layer, or packaged game data. The small music
 module always uses `-O2` because it runs in the audio callback.
@@ -379,13 +378,13 @@ The browser test uses the Chrome DevTools Protocol directly, without npm
 packages. Game data is supplied by the caller and never committed.
 
 ```sh
-node doom/web/test.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
-node doom/web/test-music.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
-DOOM_GPU_ONLY=1 node doom/web/test.mjs /path/to/doom1.wad \
+node tests/test.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
+node tests/test-music.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
+DOOM_GPU_ONLY=1 node tests/test.mjs /path/to/doom1.wad \
   /path/to/doomu.wad /path/to/doom2.wad
-DOOM_CRT_ONLY=1 node doom/web/test.mjs /path/to/doom1.wad \
+DOOM_CRT_ONLY=1 node tests/test.mjs /path/to/doom1.wad \
   /path/to/doomu.wad /path/to/doom2.wad
-DOOM_PRESETS_ONLY=1 node doom/web/test.mjs /path/to/doom1.wad \
+DOOM_PRESETS_ONLY=1 node tests/test.mjs /path/to/doom1.wad \
   /path/to/doomu.wad /path/to/doom2.wad
 ```
 
@@ -455,7 +454,7 @@ compiles the unchanged OPL driver and chip into a temporary test module;
 none of that test code ships in the game. No SDL installation is needed.
 
 ```sh
-node doom/web/test-opl.mjs /path/to/chocolate-doom /path/to/doom1.wad \
+node tests/test-opl.mjs /path/to/chocolate-doom /path/to/doom1.wad \
   /path/to/doomu.wad /path/to/doom2.wad
 ```
 
@@ -465,7 +464,7 @@ cover all 128 melodic instruments, all 47 percussion patches, channel
 mapping, layered voices, pitch bends, ignored controllers, and volume
 changes. Pause key-offs and release samples are compared as well.
 
-The port is GPL-2.0; see [LICENSE.TXT](../../LICENSE.TXT). Nuked OPL3 is
+The port is GPL-2.0; see [LICENSE.TXT](../LICENSE.TXT). Nuked OPL3 is
 LGPL-2.1-or-later; source revisions and notices are in
-[vendor/README.md](../vendor/README.md). CRT shader licenses and revisions are
+[lib/README.md](../lib/README.md). CRT shader licenses and revisions are
 in [shaders/README.md](../shaders/README.md). Game data is separate.

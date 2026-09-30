@@ -97,21 +97,8 @@ int NetbufferSize (void)
 //
 unsigned NetbufferChecksum (void)
 {
-    unsigned		c;
-    int		i,l;
-
-    c = 0x1234567;
-
-    // FIXME -endianess?
-#ifdef NORMALUNIX
-    return 0;			// byte order problems
-#endif
-
-    l = (NetbufferSize () - (int)&(((doomdata_t *)0)->retransmitfrom))/4;
-    for (i=0 ; i<l ; i++)
-	c += ((unsigned *)&netbuffer->retransmitfrom)[i] * (i+1);
-
-    return c & NCMD_CHECKSUM;
+    /* The single-player transport does not use packet checksums. */
+    return 0;
 }
 
 //
@@ -358,97 +345,13 @@ void GetPackets (void)
 }
 
 
-//
-// NetUpdate
-// Builds ticcmds for console player,
-// sends out a packet
-//
-int      gametime;
+/* Legacy tic-loop clock; the browser advances time through D_AdvanceFrame. */
+int gametime;
 
+/* D_AdvanceFrame builds commands before each tic; render calls do no work. */
 void NetUpdate (void)
 {
-#ifdef EXTERNAL_LOOP
-    /* D_AdvanceFrame builds commands once, before each deterministic game tic. */
-    return;
-#endif
-    int             nowtime;
-    int             newtics;
-    int				i,j;
-    int				realstart;
-    int				gameticdiv;
-    
-    // check time
-    nowtime = I_GetTime ()/ticdup;
-    newtics = nowtime - gametime;
-    gametime = nowtime;
-	
-    if (newtics <= 0) 	// nothing new to update
-	goto listen; 
-
-    if (skiptics <= newtics)
-    {
-	newtics -= skiptics;
-	skiptics = 0;
-    }
-    else
-    {
-	skiptics -= newtics;
-	newtics = 0;
-    }
-	
-		
-    netbuffer->player = consoleplayer;
-    
-    // build new ticcmds for console player
-    gameticdiv = gametic/ticdup;
-    for (i=0 ; i<newtics ; i++)
-    {
-	I_StartTic ();
-	D_ProcessEvents ();
-	if (maketic - gameticdiv >= BACKUPTICS/2-1)
-	    break;          // can't hold any more
-	
-	//printf ("mk:%i ",maketic);
-	G_BuildTiccmd (&localcmds[maketic%BACKUPTICS]);
-	maketic++;
-    }
-
-
-    if (singletics)
-	return;         // singletic update is syncronous
-    
-    // send the packet to the other nodes
-    for (i=0 ; i<doomcom->numnodes ; i++)
-	if (nodeingame[i])
-	{
-	    netbuffer->starttic = realstart = resendto[i];
-	    netbuffer->numtics = maketic - realstart;
-	    if (netbuffer->numtics > BACKUPTICS)
-		I_Error ("NetUpdate: netbuffer->numtics > BACKUPTICS");
-
-	    resendto[i] = maketic - doomcom->extratics;
-
-	    for (j=0 ; j< netbuffer->numtics ; j++)
-		netbuffer->cmds[j] = 
-		    localcmds[(realstart+j)%BACKUPTICS];
-					
-	    if (remoteresend[i])
-	    {
-		netbuffer->retransmitfrom = nettics[i];
-		HSendPacket (i, NCMD_RETRANSMIT);
-	    }
-	    else
-	    {
-		netbuffer->retransmitfrom = 0;
-		HSendPacket (i, 0);
-	    }
-	}
-    
-    // listen for other packets
-  listen:
-    GetPackets ();
 }
-
 
 
 //

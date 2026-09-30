@@ -30,9 +30,7 @@ rcsid[] = "$Id: v_video.c,v 1.5 1997/02/03 22:45:13 b1 Exp $";
 
 #include "i_system.h"
 #include "r_local.h"
-#ifdef VARIABLE_VIDEO
 #include "v_view.h"
-#endif
 
 #include "doomdef.h"
 #include "doomdata.h"
@@ -193,10 +191,8 @@ V_CopyRect
     for ( ; height>0 ; height--) 
     { 
 	memcpy (dest, src, width);
-#ifdef VARIABLE_VIDEO
         if (!destscrn)
             V_CopyViewPixels(dest - screens[0], width);
-#endif
 	src += SCREENWIDTH; 
 	dest += SCREENWIDTH; 
     } 
@@ -223,9 +219,7 @@ V_DrawPatch
     byte*	source; 
     int		w; 
 	 
-#ifdef VARIABLE_VIDEO
     if (!scrn) V_DrawViewPatch(x, y, patch, 0);
-#endif
     y -= SHORT(patch->topoffset); 
     x -= SHORT(patch->leftoffset); 
 #ifdef RANGECHECK 
@@ -293,9 +287,7 @@ V_DrawPatchFlipped
     byte*	source; 
     int		w; 
 	 
-#ifdef VARIABLE_VIDEO
     if (!scrn) V_DrawViewPatch(x, y, patch, 1);
-#endif
     y -= SHORT(patch->topoffset); 
     x -= SHORT(patch->leftoffset); 
 #ifdef RANGECHECK 
@@ -443,10 +435,8 @@ V_DrawBlock
     while (height--) 
     { 
 	memcpy (dest, src, width);
-#ifdef VARIABLE_VIDEO
         if (!scrn)
             V_CopyViewPixels(dest - screens[0], width);
-#endif
 	src += width; 
 	dest += SCREENWIDTH; 
     } 

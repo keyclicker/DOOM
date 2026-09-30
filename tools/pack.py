@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pack_shaders import SHADERS, bundle
 
-WEB = Path(__file__).resolve().parent
+WEB = Path(__file__).resolve().parent.parent / 'web'
 
 
 def page(out, compact=False):

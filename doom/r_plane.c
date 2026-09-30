@@ -37,10 +37,8 @@ rcsid[] = "$Id: r_plane.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 #include "doomstat.h"
 
 #include "r_local.h"
-#ifdef VARIABLE_VIDEO
 #include "r_view.h"
 #include "v_view.h"
-#endif
 #include "r_sky.h"
 
 
@@ -53,11 +51,7 @@ planefunction_t		ceilingfunc;
 //
 
 // Here comes the obnoxious "visplane".
-#ifdef VARIABLE_VIDEO
 #define MAXVISPLANES 256
-#else
-#define MAXVISPLANES 128
-#endif
 visplane_t		visplanes[MAXVISPLANES];
 visplane_t*		lastvisplane;
 visplane_t*		floorplane;
@@ -416,11 +410,7 @@ void R_DrawPlanes (void)
 	// sky flat
 	if (pl->picnum == skyflatnum)
 	{
-#ifdef VARIABLE_VIDEO
             dc_iscale = FixedDiv(160 * FRACUNIT, projectiony) >> detailshift;
-#else
-	    dc_iscale = pspriteiscale>>detailshift;
-#endif
 	    
 	    // Sky is allways drawn full bright,
 	    //  i.e. colormaps[0] is used.
