@@ -415,7 +415,11 @@ void R_DrawPlanes (void)
 	// sky flat
 	if (pl->picnum == skyflatnum)
 	{
+#ifdef WEB
+            dc_iscale = FixedDiv(160 * FRACUNIT, web_yprojection) >> detailshift;
+#else
 	    dc_iscale = pspriteiscale>>detailshift;
+#endif
 	    
 	    // Sky is allways drawn full bright,
 	    //  i.e. colormaps[0] is used.

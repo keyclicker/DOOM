@@ -43,6 +43,8 @@ rcsid[] = "$Id: r_things.c,v 1.5 1997/02/03 16:47:56 b1 Exp $";
 #else
 #define WEB_LIGHT_WIDTH (viewwidth << detailshift)
 #define WEB_LIGHT_SCALE(x) (x)
+#define Web_VerticalScale(x) (x)
+#define Web_VerticalInverse(x) (x)
 #endif
 
 #include "doomstat.h"
@@ -352,12 +354,11 @@ short*		mfloorclip;
 short*		mceilingclip;
 
 fixed_t		spryscale;
-fixed_t		sprtopscreen;
+raster_fixed_t	sprtopscreen;
 
 void R_DrawMaskedColumn (column_t* column)
 {
-    int		topscreen;
-    int 	bottomscreen;
+    raster_fixed_t topscreen, bottomscreen;
     fixed_t	basetexturemid;
 	
     basetexturemid = dc_texturemid;
@@ -366,8 +367,8 @@ void R_DrawMaskedColumn (column_t* column)
     {
 	// calculate unclipped screen coordinates
 	//  for post
-	topscreen = sprtopscreen + spryscale*column->topdelta;
-	bottomscreen = topscreen + spryscale*column->length;
+	topscreen = sprtopscreen + (raster_fixed_t)spryscale * column->topdelta;
+	bottomscreen = topscreen + (raster_fixed_t)spryscale * column->length;
 
 	dc_yl = (topscreen+FRACUNIT-1)>>FRACBITS;
 	dc_yh = (bottomscreen-1)>>FRACBITS;
@@ -427,11 +428,11 @@ R_DrawVisSprite
 	    ( (vis->mobjflags & MF_TRANSLATION) >> (MF_TRANSSHIFT-8) );
     }
 	
-    dc_iscale = abs(vis->xiscale)>>detailshift;
+    dc_iscale = Web_VerticalInverse(abs(vis->xiscale)) >> detailshift;
     dc_texturemid = vis->texturemid;
     frac = vis->startfrac;
     spryscale = vis->scale;
-    sprtopscreen = centeryfrac - FixedMul(dc_texturemid,spryscale);
+    sprtopscreen = centeryfrac - R_RasterMul(dc_texturemid, spryscale);
 	
     for (dc_x=vis->x1 ; dc_x<=vis->x2 ; dc_x++, frac += vis->xiscale)
     {
@@ -485,6 +486,11 @@ void R_ProjectSprite (mobj_t* thing)
     angle_t		ang;
     fixed_t		iscale;
     
+#ifdef WEB
+    /* The interpolated camera can trail behind its own player object. */
+    if (thing == viewplayer->mo) return;
+#endif
+
     // transform the origin point
     tr_x = thing->x - viewx;
     tr_y = thing->y - viewy;
@@ -559,7 +565,7 @@ void R_ProjectSprite (mobj_t* thing)
     // store information in a vissprite
     vis = R_NewVisSprite ();
     vis->mobjflags = thing->flags;
-    vis->scale = xscale<<detailshift;
+    vis->scale = Web_VerticalScale(xscale) << detailshift;
     vis->gx = thing->x;
     vis->gy = thing->y;
     vis->gz = thing->z;
@@ -604,7 +610,8 @@ void R_ProjectSprite (mobj_t* thing)
     else
     {
 	// diminished light
-	index = WEB_LIGHT_SCALE(xscale)>>(LIGHTSCALESHIFT-detailshift);
+	index = WEB_LIGHT_SCALE(Web_VerticalScale(xscale))
+            >> (LIGHTSCALESHIFT - detailshift);
 
 	if (index >= MAXLIGHTSCALE) 
 	    index = MAXLIGHTSCALE-1;
@@ -705,7 +712,7 @@ void R_DrawPSprite (pspdef_t* psp)
     vis->texturemid = (BASEYCENTER<<FRACBITS)+FRACUNIT/2-(psp->sy-spritetopoffset[lump]);
     vis->x1 = x1 < 0 ? 0 : x1;
     vis->x2 = x2 >= viewwidth ? viewwidth-1 : x2;	
-    vis->scale = pspritescale<<detailshift;
+    vis->scale = Web_VerticalScale(pspritescale) << detailshift;
     
     if (flip)
     {

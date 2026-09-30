@@ -35,8 +35,8 @@ enum { VERSION =  110 };
 
 // Bound software-renderer storage independently of the 320x200 UI.
 #ifdef WEB
-#define R_MAXWIDTH 4096
-#define R_MAXHEIGHT 800
+#define R_MAXWIDTH 8192
+#define R_MAXHEIGHT 8192
 #define PLANE_UNSET 0xffff
 #else
 #define R_MAXWIDTH SCREENWIDTH

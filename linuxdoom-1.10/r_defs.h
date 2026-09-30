@@ -31,6 +31,16 @@
 // we depend on.
 #include "m_fixed.h"
 
+/* Keep off-screen raster edges wide until clipping at native resolutions. */
+#ifdef WEB
+#include <stdint.h>
+typedef int64_t raster_fixed_t;
+#define R_RasterMul(a, b) (((int64_t)(a) * (b)) >> FRACBITS)
+#else
+typedef fixed_t raster_fixed_t;
+#define R_RasterMul(a, b) FixedMul(a, b)
+#endif
+
 // We rely on the thinker data struct
 // to handle sound origins in sectors.
 #include "d_think.h"

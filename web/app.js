@@ -104,7 +104,6 @@ const Doom = {
       Settings.apply();
       this.running = true;
       this.loader.hidden = true;
-      if (Settings.dialog.open) this.audio.suspend();
       this.lastFrame = performance.now();
       requestAnimationFrame(time => this.frame(time));
     } catch (error) {
@@ -120,7 +119,8 @@ const Doom = {
     try {
       if (!this.suspended) {
         this.elapsed += Math.min(time - this.lastFrame, 250);
-        let changed = false;
+        const resized = Settings.flush();
+        let changed = resized;
         while (this.elapsed >= 1000 / 35) {
           this.engine._web_mouse(this.buttons,
             Math.round(this.mouseX), Math.round(this.mouseY));
@@ -130,8 +130,9 @@ const Doom = {
           this.elapsed -= 1000 / 35;
           changed = true;
         }
-        if (Settings.value.unlocked) {
-          this.engine._web_render(Math.round(this.elapsed * 35 / 1000 * 65536));
+        if (Settings.value.unlocked || resized) {
+          this.engine._web_render(Settings.value.unlocked
+            ? Math.round(this.elapsed * 35 / 1000 * 65536) : 65536);
         }
         if (changed || Settings.value.unlocked) {
           this.draw();
@@ -207,6 +208,8 @@ function doomKey(event) {
     ControlLeft: 0x9d, ControlRight: 0x9d,
     ShiftLeft: 0xb6, ShiftRight: 0xb6, AltLeft: 0xb8, AltRight: 0xb8,
     Space: 32, Minus: 45, Equal: 61, Comma: 44, Period: 46,
+    BracketLeft: 91, BracketRight: 93, Backslash: 92, IntlBackslash: 92,
+    Semicolon: 59, Quote: 39, Slash: 47, Backquote: 96, NumpadEnter: 13,
     F1: 0xbb, F2: 0xbc, F3: 0xbd, F4: 0xbe, F5: 0xbf,
     F6: 0xc0, F7: 0xc1, F8: 0xc2, F9: 0xc3, F10: 0xc4,
     F11: 0xd7, F12: 0xd8,
@@ -245,12 +248,6 @@ document.ondrop = event => {
 Doom.canvas.onclick = () => Doom.capture();
 document.oncontextmenu = event => event.preventDefault();
 document.onkeydown = event => {
-  if (Settings.key(event)) return;
-  if (event.code === 'Backquote' && !event.repeat && !event.metaKey) {
-    event.preventDefault();
-    Settings.open();
-    return;
-  }
   if (!Doom.running) return;
   syncModifiers(event);
   // Keep Command shortcuts, but allow movement with a Ctrl–Alt–Command chord.
@@ -264,7 +261,7 @@ document.onkeydown = event => {
   Doom.engine._web_key(key, 1);
 };
 document.onkeyup = event => {
-  if (!Doom.running || Settings.dialog.open) return;
+  if (!Doom.running) return;
   syncModifiers(event);
   const key = Doom.held.get(event.code);
   if (!key) return;
@@ -297,7 +294,7 @@ window.onblur = () => {
   Doom.persist();
 };
 window.onfocus = () => {
-  Doom.suspended = Settings.dialog.open;
+  Doom.suspended = false;
   Doom.lastFrame = performance.now();
   if (Doom.running && !Doom.suspended) Doom.audio.resume().catch(console.warn);
 };

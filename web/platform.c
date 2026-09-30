@@ -22,6 +22,7 @@
 #include "z_zone.h"
 #include "f_wipe.h"
 #include "render.h"
+#include "settings.h"
 #include <emscripten.h>
 
 /* Pixels are expanded once per frame, using a palette lookup table. */
@@ -95,8 +96,41 @@ EMSCRIPTEN_KEEPALIVE void web_render(int fraction)
 /* Suspend gameplay during the original melt transition, without spinning. */
 void Web_BeginWipe(void) { wiping = 1; }
 
-/* Rebind native actions, leaving menu navigation and cheat text independent. */
-EMSCRIPTEN_KEEPALIVE void web_bind(int action, int key)
+/* Keep browser-specific operations out of the native menu implementation. */
+int web_resolution = 1, web_aspect, web_unlocked, web_show_fps;
+int web_fps_value;
+EM_JS(void, browser_settings_changed, (), { Settings.dirty = true; });
+
+/* Queue changes for the browser boundary after native input processing. */
+void Web_SettingsChanged(void) { browser_settings_changed(); }
+
+/* Restore validated preferences before the first frame. */
+EMSCRIPTEN_KEEPALIVE void web_settings(int scale, int aspect, int fps, int show)
+{
+    if (scale < 0 || scale > 6) return;
+    web_resolution = scale;
+    web_aspect = !!aspect;
+    web_unlocked = !!fps;
+    web_show_fps = !!show;
+}
+
+/* Read native settings after the menu changes them. */
+EMSCRIPTEN_KEEPALIVE int web_setting(int index)
+{
+    switch (index) {
+    case 0: return web_resolution;
+    case 1: return web_aspect;
+    case 2: return web_unlocked;
+    case 3: return web_show_fps;
+    default: return 0;
+    }
+}
+
+/* Update the presentation counter without advancing game time. */
+EMSCRIPTEN_KEEPALIVE void web_fps(int value) { web_fps_value = value; }
+
+/* Access the same action variables used by G_BuildTiccmd. */
+int *Web_Binding(int action)
 {
     extern int key_up, key_down, key_left, key_right;
     extern int key_strafeleft, key_straferight, key_fire, key_use;
@@ -104,8 +138,21 @@ EMSCRIPTEN_KEEPALIVE void web_bind(int action, int key)
     int *bindings[] = {&key_up, &key_down, &key_left, &key_right,
         &key_strafeleft, &key_straferight, &key_fire, &key_use,
         &key_strafe, &key_speed};
-    if (action >= 0 && action < 10 && key > 0 && key < 256)
-        *bindings[action] = key;
+    return action >= 0 && action < 10 ? bindings[action] : NULL;
+}
+
+/* Restore native action codes; menu navigation stays independent. */
+EMSCRIPTEN_KEEPALIVE void web_bind(int action, int key)
+{
+    int *binding = Web_Binding(action);
+    if (binding && key > 0 && key < 256) *binding = key;
+}
+
+/* Serialize numeric key codes without exposing engine pointers to JavaScript. */
+EMSCRIPTEN_KEEPALIVE int web_binding(int action)
+{
+    int *binding = Web_Binding(action);
+    return binding ? *binding : 0;
 }
 
 /* Post the same events used by the original platform drivers. */
@@ -143,6 +190,12 @@ EMSCRIPTEN_KEEPALIVE void web_init(void)
     myargv = args;
     singletics = true;
     D_DoomMain();
+    {
+        extern int screenblocks, screenSize, detailLevel;
+        screenblocks = 10;
+        screenSize = 7;
+        R_SetViewSize(screenblocks, detailLevel);
+    }
 }
 
 /* Browser video needs no OS resources. */
@@ -170,7 +223,7 @@ void I_FinishUpdate(void)
 {
     int i;
     byte *source = screens[0];
-    if (web_width != 320 || web_height != 200) {
+    if (web_width != 320 || web_height != 200 || web_square_pixels) {
         if (gamestate != GS_LEVEL || automapactive || wiping)
             Web_BlitScreen();
         source = web_screen;

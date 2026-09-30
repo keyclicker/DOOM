@@ -84,16 +84,16 @@ int		worldbottom;
 int		worldhigh;
 int		worldlow;
 
-fixed_t		pixhigh;
-fixed_t		pixlow;
-fixed_t		pixhighstep;
-fixed_t		pixlowstep;
+raster_fixed_t		pixhigh;
+raster_fixed_t		pixlow;
+raster_fixed_t		pixhighstep;
+raster_fixed_t		pixlowstep;
 
-fixed_t		topfrac;
-fixed_t		topstep;
+raster_fixed_t		topfrac;
+raster_fixed_t		topstep;
 
-fixed_t		bottomfrac;
-fixed_t		bottomstep;
+raster_fixed_t		bottomfrac;
+raster_fixed_t		bottomstep;
 
 
 lighttable_t**	walllights;
@@ -180,7 +180,7 @@ R_RenderMaskedSegRange
 		dc_colormap = walllights[index];
 	    }
 			
-	    sprtopscreen = centeryfrac - FixedMul(dc_texturemid, spryscale);
+	    sprtopscreen = centeryfrac - R_RasterMul(dc_texturemid, spryscale);
 	    dc_iscale = 0xffffffffu / (unsigned)spryscale;
 	    
 	    // draw the texture
@@ -686,11 +686,11 @@ R_StoreWallRange
     worldtop >>= 4;
     worldbottom >>= 4;
 	
-    topstep = -FixedMul (rw_scalestep, worldtop);
-    topfrac = (centeryfrac>>4) - FixedMul (worldtop, rw_scale);
+    topstep = -R_RasterMul (rw_scalestep, worldtop);
+    topfrac = (centeryfrac>>4) - R_RasterMul (worldtop, rw_scale);
 
-    bottomstep = -FixedMul (rw_scalestep,worldbottom);
-    bottomfrac = (centeryfrac>>4) - FixedMul (worldbottom, rw_scale);
+    bottomstep = -R_RasterMul (rw_scalestep,worldbottom);
+    bottomfrac = (centeryfrac>>4) - R_RasterMul (worldbottom, rw_scale);
 	
     if (backsector)
     {	
@@ -699,14 +699,14 @@ R_StoreWallRange
 
 	if (worldhigh < worldtop)
 	{
-	    pixhigh = (centeryfrac>>4) - FixedMul (worldhigh, rw_scale);
-	    pixhighstep = -FixedMul (rw_scalestep,worldhigh);
+	    pixhigh = (centeryfrac>>4) - R_RasterMul (worldhigh, rw_scale);
+	    pixhighstep = -R_RasterMul (rw_scalestep,worldhigh);
 	}
 	
 	if (worldlow > worldbottom)
 	{
-	    pixlow = (centeryfrac>>4) - FixedMul (worldlow, rw_scale);
-	    pixlowstep = -FixedMul (rw_scalestep,worldlow);
+	    pixlow = (centeryfrac>>4) - R_RasterMul (worldlow, rw_scale);
+	    pixlowstep = -R_RasterMul (rw_scalestep,worldlow);
 	}
     }
     
