@@ -65,6 +65,8 @@ class DoomRenderer {
     this.software = this.texture2D(9, gl.RGBA8, 1, 1, gl.RGBA);
     this.occlusionDepth = this.texture2D(10, gl.DEPTH_COMPONENT24, 1, 1,
       gl.DEPTH_COMPONENT, gl.UNSIGNED_INT);
+    this.floorSectors = this.texture2D(6, gl.R32UI, 1, 1,
+      gl.RED_INTEGER, gl.UNSIGNED_INT);
     this.occlusionBuffer = gl.createFramebuffer();
     this.framebuffer = gl.createFramebuffer();
     this.depth = gl.createRenderbuffer();
@@ -72,14 +74,14 @@ class DoomRenderer {
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertices);
-    for (const [index, size, offset] of [[0, 3, 0], [1, 2, 12], [2, 3, 20]]) {
+    for (const [index, size, offset] of [[0, 3, 0], [1, 2, 12], [2, 4, 20]]) {
       gl.enableVertexAttribArray(index);
-      gl.vertexAttribPointer(index, size, gl.FLOAT, false, 32, offset);
+      gl.vertexAttribPointer(index, size, gl.FLOAT, false, 36, offset);
     }
     const vertex = `
       layout(location=0) in vec3 position;
       layout(location=1) in vec2 uv;
-      layout(location=2) in vec3 surface;
+      layout(location=2) in vec4 surface;
       uniform vec3 eye;
       uniform vec4 direction;
       uniform vec4 projection;
@@ -88,15 +90,19 @@ class DoomRenderer {
       out float distance;
       flat out int material;
       flat out float light;
+      flat out uint sector;
       #ifdef SPRITE
       flat out float floorHeight;
+      out float worldZ;
       #endif
       void main() {
         texcoord = uv;
         material = int(surface.x);
         light = surface.y;
+        sector = uint(surface.w);
         #ifdef SPRITE
         floorHeight = surface.z;
+        worldZ = position.z;
         #endif
         if (weapon) {
           gl_Position = vec4(position.x * 2.0 / projection.z - 1.0,
@@ -131,13 +137,18 @@ class DoomRenderer {
       in float distance;
       flat in int material;
       flat in float light;
+      flat in uint sector;
       #ifdef SPRITE
       uniform vec3 eye;
       uniform float subpixel;
       uniform highp sampler2D occlusion;
+      uniform highp usampler2D floorSectors;
       flat in float floorHeight;
+      in float worldZ;
+      #else
+      layout(location=1) out uint floorSector;
       #endif
-      out vec4 color;
+      layout(location=0) out vec4 color;
       void main() {
         vec4 rect = texelFetch(rects, ivec2(material, 0), 0);
         vec2 uv = texcoord;
@@ -162,7 +173,11 @@ class DoomRenderer {
         gl_FragDepth = gl_FragCoord.z;
         float rayZ = direction.w + direction.z
           * (gl_FragCoord.y - origin.y - projection.w * 0.5) / projection.y;
-        if (eye.z > floorHeight && rayZ < 0.0) {
+        if (worldZ < floorHeight) {
+          // Only the visible part of this sector's floor can support the art.
+          if (eye.z <= floorHeight || rayZ >= 0.0 || sector == 0u
+            || texelFetch(floorSectors, ivec2(gl_FragCoord.xy), 0).r != sector)
+            discard;
           // Match the floor despite raster subpixel and D24 rounding.
           float depth = (floorHeight - eye.z) / rayZ;
           float floorDepth = 1.000003815 - 0.500001905 / depth;
@@ -174,6 +189,8 @@ class DoomRenderer {
           float bias = slope * subpixel + 2.0 / 16777216.0;
           gl_FragDepth = min(gl_FragDepth, floorDepth - bias);
         }
+        #else
+        floorSector = sector;
         #endif
         int index = int(texel.r * 255.0 + 0.5);
         int shade = int(clamp((15.0 - clamp(light, 0.0, 15.0)) * 4.0
@@ -261,6 +278,7 @@ class DoomRenderer {
     gl.uniform1f(this.uniform(this.sprites, 'subpixel'),
       2 ** -gl.getParameter(gl.SUBPIXEL_BITS));
     gl.uniform1i(this.uniform(this.sprites, 'occlusion'), 10);
+    gl.uniform1i(this.uniform(this.sprites, 'floorSectors'), 6);
     gl.useProgram(this.ui);
     for (const [name, unit] of [['overlay', 4], ['palette', 2],
       ['backdrop', 8], ['software', 9]])
@@ -336,6 +354,10 @@ class DoomRenderer {
     if (this.width === width && this.height === height) return;
     this.width = width;
     this.height = height;
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, this.floorSectors);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32UI, width, height, 0,
+      gl.RED_INTEGER, gl.UNSIGNED_INT, null);
     gl.activeTexture(gl.TEXTURE10);
     gl.bindTexture(gl.TEXTURE_2D, this.occlusionDepth);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, width, height, 0,
@@ -408,9 +430,14 @@ class DoomRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
     gl.disable(gl.SCISSOR_TEST);
     gl.depthMask(true);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1,
+      gl.TEXTURE_2D, this.floorSectors, 0);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
     const clear = this.paletteBytes;
-    gl.clearColor(clear[0] / 255, clear[1] / 255, clear[2] / 255, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.clearBufferfv(gl.COLOR, 0,
+      [clear[0] / 255, clear[1] / 255, clear[2] / 255, 1]);
+    gl.clearBufferuiv(gl.COLOR, 1, [0, 0, 0, 0]);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
     const [, , , , pitch, , , vx, vy, vw, vh, fixed, , sky] = camera;
     gl.viewport(vx, this.height - vy - vh, vw, vh);
     gl.enable(gl.DEPTH_TEST);
@@ -446,10 +473,17 @@ class DoomRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
     this.useScene(this.scene, camera);
     gl.drawArrays(gl.TRIANGLES, 0, count);
+    // Freeze floor ownership before sprites; never sample an attached texture.
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1,
+      gl.TEXTURE_2D, null, 0);
+    // Unit 6 is also used when allocating a transition capture.
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, this.floorSectors);
     this.useScene(this.sprites, camera);
     gl.drawArrays(gl.TRIANGLES, count + occluders, sprites);
     const opaque = count + occluders + sprites;
-    if (shadows || (weapons && vertices[(opaque + shadows) * 8 + 6] === -2)) {
+    if (shadows || (weapons && vertices[(opaque + shadows) * 9 + 6] === -2)) {
       gl.activeTexture(gl.TEXTURE7);
       gl.bindTexture(gl.TEXTURE_2D, this.background);
       if (this.backgroundWidth !== this.width) {

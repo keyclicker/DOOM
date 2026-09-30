@@ -288,11 +288,16 @@ measurement on the target device, not the test VM's SwiftShader.
   Materials are uploaded once per context as palette indices plus coverage.
   Frustum rejection works at arbitrary pitch; BSP ordering reduces overdraw.
   A visibility-only pass retains the original automap discovery rules.
-  Sprites carry their interpolated sector floor height. Their shader tests
-  below-floor artwork at that floor's depth, preserving the original artwork
-  position instead of lifting actors. A depth-only solid-wall silhouette pass
-  keeps hidden feet behind walls and closed doors. Higher floors still occlude
-  sprites; weapons and ordinary world depth testing are unchanged.
+  Sprites carry their sector ID and interpolated floor height. The world pass
+  also writes visible floor IDs to an `R32UI` attachment; walls, ceilings and
+  sky write zero. Below-floor artwork is allowed only over that sector's
+  visible floor, at its depth, preserving the original artwork position
+  instead of lifting actors. Detach the ID texture before sampling it in the
+  sprite pass. A depth-only solid-wall silhouette pass keeps hidden feet
+  behind walls and closed doors, including disconnected parts of one sector.
+  Higher floors still occlude sprites; weapons and ordinary world depth
+  testing are unchanged. Floor IDs cost four bytes per render pixel and one
+  float per vertex, with no additional geometry pass or GPU readback.
 - `doom/i_render.c` implements `i_render.h`; `render.js` submits triangles
   directly to WebGL 2. Indexed texture and COLORMAP lookups retain the WAD's
   palette, gamma, damage flashes and power-up colors. The native status bar,
@@ -481,7 +486,10 @@ normal WebGL device selection.
 `test-sprites.mjs` checks sprite floor-height interpolation without simulation
 changes, and compares visible artwork pixels with/without a supporting floor.
 It covers different floor heights, pitch, solid-wall silhouettes, higher-floor
-occlusion, airborne sprites and spectre fuzz. The old world shader is a negative
+occlusion, airborne sprites and spectre fuzz. Sector-edge fixtures cover
+same-height neighbors, drop-offs, raised floors, both draw orders and cleared
+mask pixels between frames. Above-floor artwork still crosses sector edges.
+The old world shader is a negative
 control that reproduces the original floor clipping.
 
 Tests start a game through its menus, move, fire, use the automap, pause,

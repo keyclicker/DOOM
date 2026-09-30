@@ -29,7 +29,7 @@ export async function testSprites(evaluate) {
       supports = [];
       const end = count + occluders + sprites + shadows;
       for (let i = count + occluders; i < end; i++)
-        supports.push(vertices[i * 8 + 7]);
+        supports.push(vertices[i * 9 + 7]);
     };
     try {
       for (const [sector, z] of floors) memory.setInt32(sector, z + delta, true);
@@ -66,20 +66,21 @@ export async function testSprites(evaluate) {
     const red = g.paletteBytes.slice(g.mapBytes[176] * 4,
       g.mapBytes[176] * 4 + 3);
     const camera = [0, 0, 41, 0, 0, 160, 160, 0, 0, 320, 200, 0, 0, 0];
-    const quad = (points, material, floor = 0) => [0, 1, 2, 2, 1, 3]
-      .flatMap(i => [...points[i], 0, 0, material, 256, floor]);
-    const floor = z => quad([[1, -256, z], [512, -256, z],
-      [1, 256, z], [512, 256, z]], 0);
+    const quad = (points, material, floor = 0, sector = 0) => [0, 1, 2, 2, 1, 3]
+      .flatMap(i => [...points[i], 0, 0, material, 256, floor, sector]);
+    const floor = (z, sector = 1, left = -256, right = 256) =>
+      quad([[1, left, z], [512, left, z],
+        [1, right, z], [512, right, z]], 0, 0, sector);
     const sprite = (bottom, top, support) => quad([[128, 24, top],
-      [128, 24, bottom], [128, -24, top], [128, -24, bottom]], 1, support);
+      [128, 24, bottom], [128, -24, top], [128, -24, bottom]], 1, support, 1);
     const wall = quad([[120, 128, 128], [120, 128, -32],
       [120, -128, 128], [120, -128, -32]], 0);
     const solid = quad([[120, 128, 32768], [120, 128, -32768],
       [120, -128, 32768], [120, -128, -32768]], 0);
     const draw = (world, art, shadow = false, occluders = []) => {
-      g.world(new Float32Array([...world, ...occluders, ...art]), world.length / 8,
-        occluders.length / 8,
-        shadow ? 0 : art.length / 8, shadow ? art.length / 8 : 0, 0, camera);
+      g.world(new Float32Array([...world, ...occluders, ...art]), world.length / 9,
+        occluders.length / 9,
+        shadow ? 0 : art.length / 9, shadow ? art.length / 9 : 0, 0, camera);
       gl.bindFramebuffer(gl.FRAMEBUFFER, g.framebuffer);
       const pixels = new Uint8Array(320 * 200 * 4);
       gl.readPixels(0, 0, 320, 200, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
@@ -87,16 +88,18 @@ export async function testSprites(evaluate) {
       return pixels;
     };
     const isSprite = (pixels, p) => red.every((value, c) => pixels[p + c] === value);
-    let restored = 0, samples = 0, wallLeaks = 0;
+    let restored = 0, samples = 0, wallLeaks = 0, boundaryPixels = 0;
     try {
       for (const support of [-24, 0, 16]) {
         for (const pitch of [-0.6, 0, 0.2]) {
           camera[4] = pitch;
           const art = sprite(support - 12, support + 44, support);
+          const shader = g.sprites;
+          g.sprites = g.scene;
           const reference = draw([], art);
+          g.sprites = shader;
           const visible = draw(floor(support), art);
           // Negative control: the old world shader must reproduce the cutoff.
-          const shader = g.sprites;
           g.sprites = g.scene;
           const clipped = draw(floor(support), art);
           g.sprites = shader;
@@ -126,6 +129,45 @@ export async function testSprites(evaluate) {
         if (isSprite(flat, p) && !isSprite(raised, p)) hidden++;
       check(hidden > 100, 'A higher floor failed to occlude the sprite');
 
+      // The billboard may cross a sector edge, but its buried art may not.
+      // Same-colored floors ensure this checks ownership, not color or height.
+      for (const pitch of [-0.6, 0, 0.2]) {
+        camera[4] = pitch;
+        const full = draw(floor(0), art);
+        // Stay one map unit off the seam to avoid raster edge rounding.
+        const upper = draw(floor(0), sprite(1, 44, 0));
+        const feet = draw(floor(0), sprite(-12, -1, 0));
+        for (const height of [-16, 0, 16]) {
+          const own = floor(0, 1, 0, 256);
+          const neighbor = floor(height, 2, -256, 0);
+          for (const world of [[...own, ...neighbor], [...neighbor, ...own]]) {
+            const edge = draw(world, art);
+            const cropped = draw(world, sprite(0, 44, 0));
+            for (let p = 0; p < full.length; p += 4) {
+              if (!isSprite(full, p)) continue;
+              if (isSprite(upper, p)) {
+                check(isSprite(edge, p) === isSprite(cropped, p),
+                  'Sector mask changed above-floor sprite occlusion at '
+                    + [pitch, height, p / 4 % 320, Math.floor(p / 1280)]);
+              } else if (isSprite(feet, p)) {
+                const ownSide = p / 4 % 320 < 160;
+                check(isSprite(edge, p) === ownSide,
+                  'Sprite feet escaped their floor at '
+                    + [pitch, height, p / 4 % 320, Math.floor(p / 1280)]);
+                boundaryPixels++;
+              }
+            }
+          }
+        }
+        // A missing floor must not borrow the previous frame's sector mask.
+        const empty = draw([], art);
+        for (let p = 0; p < full.length; p += 4)
+          if (isSprite(feet, p))
+            check(!isSprite(empty, p), 'Stale floor mask exposed buried art');
+      }
+      check(boundaryPixels > 1000, 'Sector edge fixture missed the feet');
+      camera[4] = 0;
+
       // An airborne billboard must retain its position and exact visible pixels.
       const airborne = sprite(16, 60, 0);
       const reference = draw([], airborne);
@@ -136,7 +178,7 @@ export async function testSprites(evaluate) {
 
       // Spectres use the same depth rule in their separate fuzz draw.
       const shadow = [...art];
-      for (let i = 6; i < shadow.length; i += 8) shadow[i] = -2;
+      for (let i = 6; i < shadow.length; i += 9) shadow[i] = -2;
       const ground = draw(floor(0), []);
       const fuzz = draw(floor(0), shadow, true);
       const shader = g.sprites;
@@ -147,9 +189,18 @@ export async function testSprites(evaluate) {
       for (let p = 0; p < ground.length; p += 4)
         if (fuzz[p] !== ground[p] && oldFuzz[p] === ground[p]) fuzzyFeet++;
       check(fuzzyFeet > 20, 'Floor still clipped a spectre');
+      const edgeWorld = [...floor(0, 1, 0, 256), ...floor(-16, 2, -256, 0)];
+      const edgeGround = draw(edgeWorld, []);
+      const edgeFuzz = draw(edgeWorld, shadow, true);
+      const feet = draw(floor(0), sprite(-12, -1, 0));
+      for (let p = 0; p < feet.length; p += 4)
+        if (p / 4 % 320 >= 160 && isSprite(feet, p))
+          for (let c = 0; c < 3; c++)
+            check(edgeFuzz[p + c] === edgeGround[p + c],
+              'Spectre feet escaped their floor');
       check(restored > 100, 'Negative control did not reproduce floor clipping');
       check(wallLeaks > 100, 'Negative control did not reproduce hidden feet');
-      return {samples, restored, hidden, fuzzyFeet, wallLeaks};
+      return {samples, restored, hidden, fuzzyFeet, wallLeaks, boundaryPixels};
     } finally {
       gl.getExtension('WEBGL_lose_context').loseContext();
     }

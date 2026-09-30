@@ -3,9 +3,11 @@
 #define I_RENDER_H
 #include "doomtype.h"
 
-/* World coordinates, pixel UVs, material/light, and the sprite's floor plane. */
+/* World position/UVs, material/light, sprite floor and one-based sector ID.
+ * Zero sector marks walls, ceilings and weapon artwork.
+ */
 typedef struct {
-    float x, y, z, u, v, material, light, floor;
+    float x, y, z, u, v, material, light, floor, sector;
 } render_vertex_t;
 
 /* Float-only camera packet keeps the host ABI independent of engine structs. */
