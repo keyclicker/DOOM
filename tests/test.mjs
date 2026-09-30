@@ -2,6 +2,7 @@
 /** Exercise the built game in Chromium using only Node's standard library. */
 import assert from 'node:assert/strict';
 import {testSettings} from './test-settings.mjs';
+import {testMenu} from './test-menu.mjs';
 import {testRenderer} from './test-renderer.mjs';
 import {testCRT} from './test-crt.mjs';
 import {testCRTPresets} from './test-crt-presets.mjs';
@@ -170,6 +171,10 @@ try {
     await loadWad();
     assert(await evaluate('Doom.running'), await evaluate('Doom.message.textContent'));
 
+    if (process.env.DOOM_MENU_ONLY) {
+      await testMenu(evaluate, send);
+      continue;
+    }
     if (process.env.DOOM_PRESETS_ONLY) {
       await testCRTPresets(evaluate, send);
       continue;
@@ -446,7 +451,8 @@ try {
   assert(requests.every(request => request.startsWith(url)
     || request.startsWith('blob:') || request.startsWith('data:')),
     'The game made an external network request');
-  console.log(process.env.DOOM_PRESETS_ONLY ? 'PASS: CRT presets and local assets'
+  console.log(process.env.DOOM_MENU_ONLY ? 'PASS: native menus and local assets'
+    : process.env.DOOM_PRESETS_ONLY ? 'PASS: CRT presets and local assets'
     : process.env.DOOM_CRT_ONLY ? 'PASS: CRT rendering and local assets'
     : process.env.DOOM_GPU_ONLY ? 'PASS: GPU rendering and local assets'
     : 'PASS: gameplay, input, menus, sound, saves, reload, local assets');

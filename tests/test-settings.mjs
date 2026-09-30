@@ -31,7 +31,7 @@ export async function testSettings(evaluate, send) {
     closeMenus();
     key(189); key(13); tick(80);
     const settings = () => {
-      key(27); key(111); key(13); key(116); key(13);
+      key(27); key(101); key(13);
     };
     const page = letter => { key(letter.charCodeAt(0)); key(13); };
     check(!document.querySelector('dialog'), 'Settings still use HTML');
@@ -39,23 +39,23 @@ export async function testSettings(evaluate, send) {
     check(/screenblocks\\s+10/.test(e.FS.readFile('/.doomrc', {encoding: 'utf8'})),
       'Default view must fill the screen with the status bar visible');
     // Escape returns one level, and cancels capture without leaving its page.
-    settings(); page('v'); key(27);
+    settings(); page('r'); key(27);
     check(e._web_state() & 16, 'Escape closed the settings stack');
-    page('p'); key(117); key(174);
+    page('r'); key(117); key(174);
     check(e._web_setting(2) === 1, 'Escape did not return to Settings');
     key(174); key(27); page('k'); page('m');
     key(13); key(27); key(13); key(119);
     check(e._web_binding(0) === 119, 'Escape left the key-capture page');
     key(13); key(173);
     check(e._web_binding(0) === 173, 'Could not restore the captured binding');
-    for (let level = 0; level < 4; level++) {
+    for (let level = 0; level < 3; level++) {
       key(27);
       check(e._web_state() & 16, 'Escape skipped a parent menu');
     }
     key(27);
     check(!(e._web_state() & 16), 'Main menu Escape did not resume play');
 
-    settings(); page('v');
+    settings(); page('r'); key(114);
 
     const frames = [];
     for (const scale of [1, 2, 3, 4, 5, 6]) {
@@ -82,7 +82,7 @@ export async function testSettings(evaluate, send) {
         }
         check(detail > 20, 'Resolution only scaled the original image');
       }
-      settings(); page('v');
+      settings(); page('r');
     }
     key(97); key(174);
     check(e._web_setting(1) === 1, 'Native aspect menu failed');
@@ -246,10 +246,10 @@ export async function testSettings(evaluate, send) {
     check(JSON.parse(localStorage.getItem('doom:settings')).keys[0] === 119,
       'Bindings not persisted');
 
-    settings(); page('p');
-    key(117); key(174); key(102); key(174);
+    settings(); page('r');
+    key(117); key(174); key(27); page('h'); key(102); key(174);
     check(Settings.value.unlocked && Settings.value.fps,
-      'Native performance settings not applied');
+      'Rendering/HUD settings not applied');
     Settings.frames = 0; Settings.sampleTime = 1000;
     for (let i = 1; i <= 60; i++) Settings.presented(1000 + i * 1000 / 60);
     closeMenus();
@@ -286,7 +286,8 @@ export async function testSettings(evaluate, send) {
     await writeFile(process.env.DOOM_SCREENSHOTS + '-game.png',
       Buffer.from(screenshot.data, 'base64'));
 
-    for (const page of ['options', 'root', 'performance', 'video', 'actions']) {
+    for (const page of ['main', 'options', 'root', 'rendering', 'crt', 'hud',
+      'keyboard', 'actions']) {
       await evaluate(`(() => {
         Doom.testCloseMenus();
         const e = Doom.engine;
@@ -294,10 +295,13 @@ export async function testSettings(evaluate, send) {
           e._web_key(code, 1); e._web_tick();
           e._web_key(code, 0); e._web_tick();
         };
-        key(27); key(111); key(13);
-        if ('${page}' !== 'options') { key(116); key(13); }
-        if ('${page}' === 'performance') { key(112); key(13); }
-        if ('${page}' === 'video') { key(118); key(13); }
+        key(27);
+        if ('${page}' === 'options') { key(111); key(13); }
+        else if ('${page}' !== 'main') { key(101); key(13); }
+        if ('${page}' === 'rendering') { key(114); key(13); }
+        if ('${page}' === 'crt') { key(99); key(13); }
+        if ('${page}' === 'hud') { key(104); key(13); }
+        if ('${page}' === 'keyboard') { key(107); key(13); }
         if ('${page}' === 'actions') {
           key(107); key(13); key(97); key(13);
         }
@@ -353,7 +357,7 @@ export async function testSettings(evaluate, send) {
       e._web_key(code, 0); e._web_tick(); Settings.flush();
     };
     Doom.testCloseMenus();
-    key(27); key(111); key(13); key(116); key(13); key(118); key(13);
+    key(27); key(101); key(13); key(114); key(13);
     key(114);
     while (e._web_setting(0) !== 0) key(174);
     Doom.testCloseMenus();
@@ -390,15 +394,15 @@ export async function testSettings(evaluate, send) {
       e._web_key(code, 1); e._web_tick();
       e._web_key(code, 0); e._web_tick(); Settings.flush();
     };
-    // Escape closes any page left open for a screenshot, then reopen Options.
+    // Escape closes any page left open for a screenshot, then select the global Default preset.
     Doom.testCloseMenus();
-    key(27); key(111); key(13); key(116); key(13); key(114); key(13);
+    key(27); key(101); key(13); key(112); key(174);
     Doom.testCloseMenus();
     Doom.suspended = true;
     Doom.engine._web_tick(); Doom.draw();
     if (Settings.value.scale !== 1 || Settings.value.unlocked
       || Settings.value.fps || Settings.value.aspect !== 'classic') {
-      throw Error('Restore defaults failed');
+      throw Error('Default preset failed');
     }
   })()`);
   console.log('PASS: settings, resolution detail, aspect, interpolation, bindings',

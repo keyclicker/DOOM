@@ -133,20 +133,40 @@ even when the remapper reports them together on a single key event.
 Some browsers reserve function keys. Save/load are also in Doom's menu.
 The game suspends when the tab loses focus. Saves and preferences persist in
 browser local storage, separately for each IWAD's SHA-256. Clearing site data
-removes them. Reload the page to choose another WAD after quitting.
+removes them. Reload the page to choose another WAD.
 
 ## In-game settings
 
-Open **Options → Settings** in Doom's menu. Video, Performance, and Keyboard
-pages use the game's font, skull cursor, sounds, and keyboard navigation.
+Open **Extra Options** from Doom's main menu. Rendering, CRT Emulation, HUD,
+and Keyboard pages use the game's font, skull cursor, sounds, and navigation.
 Use arrows to select or change an option, Enter to open a page or capture a
 binding, Escape or Backspace to go back one page. Escape at the main menu
 resumes play. Changes apply immediately.
-Options and settings use a compact font and cursor, with sliders and values
-aligned beside their labels. The default view fills the screen while keeping
-the status bar visible.
+Main Menu and Options retain their original artwork, full-size skull cursor,
+and spacing. The Extra Options entry combines lettering from the loaded
+IWAD with its Options patch, without bundling game assets. Extra Options
+pages use a compact font and cursor, with values aligned beside their labels.
+The default view fills the screen while keeping the status bar visible.
 
-- **Video:** render resolution at 320×200, 640×400, 960×600, or
+The global preset applies presentation and keyboard choices together:
+
+| Setting | Default | Emulation | Modern |
+| --- | --- | --- | --- |
+| Resolution | 320×200 | 320×200 | Native |
+| Aspect ratio | 4:3 | 4:3 | Browser |
+| Renderer | Software | Software | WebGL |
+| Free look | Off | Off | On |
+| Unlock FPS | Off | Off | On |
+| FPS counter | Off | Off | Off |
+| CRT shader | Off | Clean CRT | Off |
+| Keyboard | Original | Original | WASD |
+
+Each preset restores the largest view with the status bar visible, without
+changing sound or gameplay. Individual edits show **Custom** when the current
+values no longer match a preset. From Custom, right selects Default and left
+selects Modern. There is no separate Restore Defaults command or Quit menu.
+
+- **Rendering:** render resolution at 320×200, 640×400, 960×600, or
   1280×800, 1600×1000, or 1920×1200. **Native** follows the displayed canvas's
   size multiplied by `devicePixelRatio`, including Retina screens and changes
   in browser zoom or display density. Native buffers use square pixels;
@@ -163,19 +183,25 @@ the status bar visible.
   auto-aim remains unchanged. Disabling WebGL disables free look and centers
   the camera. Pitch is capped at ±85 degrees, interpolated with unlocked FPS,
   and reset on level/load changes. Recorded demos retain their original view.
-  **CRT filter** cycles through **Off** (default), **Clean CRT**, **Lottes**,
-  **CRT-Pi**, **Easymode**, and **Royale** with left/right arrows. All work with
+  **Unlock FPS** renders at the display refresh rate, with interpolated
+  camera, objects, moving floors/ceilings, and weapon motion. Simulation
+  remains 35 Hz. Disabling it restores the original 35 FPS.
+- **CRT Emulation:** **CRT Shader** cycles through **Off** (default),
+  **Clean CRT**, **Lottes**, **CRT-Pi**, **Easymode**, and **Royale** with
+  left/right arrows. All work with
   either renderer and filter the complete image, including HUD and menus.
   Output follows display density even at 320×200; the game still renders at
   the selected resolution. Royale has the highest GPU cost.
-- **Performance:** optional rendering at the display refresh rate, with
-  interpolated camera, objects, moving floors/ceilings, and weapon motion.
-  Simulation remains 35 Hz. Disabling it restores the original 35 FPS.
-  The optional counter measures presented frames, not simulation ticks.
-- **Keyboard:** edit movement, turning, strafing, fire, use, and run bindings.
+  **Black Level** and **Additional Bloom** are visible as **Soon**; these
+  placeholders are skipped by navigation and do not change rendering.
+- **HUD:** **FPS Counter** measures presented frames, not simulation ticks.
+  **Status Bar Height** is another inactive **Soon** placeholder.
+- **Keyboard:** edit movement, turning, strafing, fire, use, run, and automap
+  toggle bindings.
   Original and WASD presets are available. Duplicate assignments are rejected;
   left/right modifiers share one action. Menu/function keys, weapon numbers,
-  automap, view-size controls, and pause retain their original shortcuts.
+  view-size controls, and pause retain their original shortcuts. Tab is the
+  default map toggle. Older saved bindings gain Tab without losing edits.
   Mouse controls retain their original behavior unless free look is enabled.
 
 These settings persist across WADs in local storage. Native saves remain
@@ -422,6 +448,13 @@ Input regressions check all six Ctrl–Alt–Command press orders, movement
 while the chord is held, combined modifier releases, independent left/right
 Control keys, and ordinary Command shortcuts. Ammo counts verify one round
 per short tap and the original continuous fire while Control remains held.
+
+Run `DOOM_MENU_ONLY=1 node tests/test.mjs /path/to/doom.wad` to check global
+presets, placeholder navigation, map rebinding, key migration, and Escape.
+It also compares Main Menu and Options pixels with the original IWAD patches
+at their original positions.
+With `DOOM_SCREENSHOTS=/tmp/menu`, it captures every page at classic 4:3,
+native Retina/WebGL, and native portrait/software sizes.
 
 `test-settings.mjs` also exercises the native menu hierarchy, defaults,
 key capture/conflicts, rebinding, six fixed resolutions, portrait/ultrawide

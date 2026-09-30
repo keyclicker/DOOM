@@ -51,8 +51,8 @@ export async function testCRTPresets(evaluate, send) {
       for (let i = 0; i < 8 && (e._web_state() & 16); i++) key(27);
     };
     const video = () => {
-      close(); key(27); key(111); key(13); key(116); key(13);
-      key(118); key(13); key(99);
+      close(); key(27); key(101); key(13);
+      key(99); key(13); key(99);
     };
     for (const value of [null, -1, 6, 1.5, '2', {}, false])
       check(Settings.validate({crt: value}).crt === 0, 'Invalid CRT preference');

@@ -2,7 +2,7 @@
 
 /** Persist native menu choices and apply browser video changes between frames. */
 const Settings = {
-  defaults: [173, 175, 172, 174, 44, 46, 157, 32, 184, 182],
+  defaults: [173, 175, 172, 174, 44, 46, 157, 32, 184, 182, 9],
   dirty: false,
   videoDirty: false,
   frames: 0,
@@ -13,7 +13,7 @@ const Settings = {
     return Number.isInteger(key) && !(key >= 49 && key <= 55)
       && key !== 45 && key !== 61
       && ((key >= 32 && key <= 126)
-        || [13, 127, 172, 173, 174, 175, 157, 182, 184].includes(key));
+        || [9, 13, 127, 172, 173, 174, 175, 157, 182, 184].includes(key));
   },
 
   /** Validate storage, including physical key names saved by the earlier UI. */
@@ -29,8 +29,11 @@ const Settings = {
       keys: [...this.defaults]};
     const keys = Array.isArray(input?.keys) ? input.keys.map(key =>
       typeof key === 'string' ? doomKey({code: key}) : key) : null;
-    if (Array.isArray(keys) && keys.length === 10
-      && keys.every(key => this.allowedKey(key)) && new Set(keys).size === 10) {
+    // Older preferences predate editable automap; keep their action bindings.
+    if (keys?.length === this.defaults.length - 1) keys.push(9);
+    if (keys?.length === this.defaults.length
+      && keys.every(key => this.allowedKey(key))
+      && new Set(keys).size === this.defaults.length) {
       result.keys = keys;
     }
     return result;

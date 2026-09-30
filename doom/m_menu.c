@@ -133,7 +133,6 @@ boolean			menuactive;
 extern boolean		sendpause;
 char			savegamestrings[10][SAVESTRINGSIZE];
 
-char	endstring[160];
 
 
 //
@@ -191,7 +190,6 @@ void M_Options(int choice);
 void M_EndGame(int choice);
 void M_ReadThis(int choice);
 void M_ReadThis2(int choice);
-void M_QuitDOOM(int choice);
 
 void M_ChangeMessages(int choice);
 void M_ChangeSensitivity(int choice);
@@ -215,7 +213,7 @@ void M_DrawReadThis2(void);
 void M_DrawNewGame(void);
 void M_DrawEpisode(void);
 void M_DrawOptions(void);
-static void M_SettingsSettings(int choice);
+static void M_ExtraOptions(int choice);
 void M_DrawSound(void);
 void M_DrawLoad(void);
 void M_DrawSave(void);
@@ -243,10 +241,10 @@ enum
 {
     newgame = 0,
     options,
+    extraoptions,
     loadgame,
     savegame,
     readthis,
-    quitdoom,
     main_end
 } main_e;
 
@@ -254,11 +252,11 @@ menuitem_t MainMenu[]=
 {
     {1,"M_NGAME",M_NewGame,'n'},
     {1,"M_OPTION",M_Options,'o'},
+    {1,"",M_ExtraOptions,'e'},
     {1,"M_LOADG",M_LoadGame,'l'},
     {1,"M_SAVEG",M_SaveGame,'s'},
     // Another hickup with Special edition.
-    {1,"M_RDTHIS",M_ReadThis,'r'},
-    {1,"M_QUITG",M_QuitDOOM,'q'}
+    {1,"M_RDTHIS",M_ReadThis,'r'}
 };
 
 menu_t  MainDef =
@@ -349,7 +347,6 @@ enum
     mousesens,
     option_empty2,
     soundvol,
-    settings,
     opt_end
 } options_e;
 
@@ -362,8 +359,7 @@ menuitem_t OptionsMenu[]=
     {-1,"",0},
     {2,"M_MSENS",	M_ChangeSensitivity,'m'},
     {-1,"",0},
-    {1,"M_SVOL",	M_Sound,'s'},
-    {1,"", M_SettingsSettings,'t'}
+    {1,"M_SVOL",	M_Sound,'s'}
 };
 
 menu_t  OptionsDef =
@@ -855,15 +851,100 @@ void M_MusicVol(int choice)
 
 
 
-//
-// M_DrawMainMenu
-//
-void M_DrawMainMenu(void)
+/* Copy opaque column runs, leaving a glyph's excluded rows transparent.
+ * A NULL destination measures the encoded size before allocating the patch.
+ */
+static int M_CopyMenuColumn(byte *dest, const byte *post, int top, int bottom)
 {
-    V_DrawPatchDirect (94,2,0,W_CacheLumpName("M_DOOM",PU_CACHE));
+    int size = 0, y, end, stop, count;
+
+    while (post[0] != 255) {
+        end = post[0] + post[1];
+        for (y = post[0]; y < end; y = stop) {
+            if (y >= top && y < bottom) {
+                stop = bottom;
+                continue;
+            }
+            stop = y < top && top < end ? top : end;
+            count = stop - y;
+            if (dest) {
+                dest[size] = y;
+                dest[size + 1] = count;
+                dest[size + 2] = dest[size + count + 3] = 0;
+                memcpy(dest + size + 3, post + 3 + y - post[0], count);
+            }
+            size += count + 4;
+        }
+        post += post[1] + 4;
+    }
+    if (dest) dest[size] = 255;
+    return size + 1;
 }
 
+/* Assemble "Extra" from the loaded IWAD's original menu lettering.
+ * These glyph rectangles match Doom and Doom II; no game art is bundled.
+ * Exclude neighboring letter shadows from the E, t, and a edge columns.
+ */
+static patch_t *M_ExtraOptionsPatch(void)
+{
+    static patch_t *extra;
+    static const struct {
+        char *lump;
+        int first, width, trim_column, trim_top, trim_bottom;
+    } letters[] = {
+        {"M_ENDGAM", 0, 16, 15, 5, 10},     /* E */
+        {"M_SFXVOL", 28, 16, -1, 0, 0},    /* x */
+        {"M_OPTION", 30, 11, 0, 7, 9},    /* t */
+        {"M_SCRNSZ", 28, 15, -1, 0, 0},    /* r */
+        {"M_SAVEG", 16, 14, 13, 3, 5}      /* a */
+    };
+    const byte *post;
+    int sizes[72], i, x, column = 0, size = 8 + 72 * 4;
+    patch_t *source;
+    byte *data;
 
+    if (extra) return extra;
+    for (i = 0; i < sizeof(letters) / sizeof(*letters); i++) {
+        source = W_CacheLumpName(letters[i].lump, PU_CACHE);
+        for (x = 0; x < letters[i].width; x++, column++) {
+            post = (byte *)source
+                + LONG(source->columnofs[letters[i].first + x]);
+            sizes[column] = M_CopyMenuColumn(NULL, post,
+                x == letters[i].trim_column ? letters[i].trim_top : 0,
+                x == letters[i].trim_column ? letters[i].trim_bottom : 0);
+            size += sizes[column];
+        }
+    }
+    extra = Z_Malloc(size, PU_STATIC, NULL);
+    extra->width = SHORT(72);
+    extra->height = SHORT(15);
+    extra->leftoffset = extra->topoffset = 0;
+    data = (byte *)extra + 8 + 72 * 4;
+    column = 0;
+    for (i = 0; i < sizeof(letters) / sizeof(*letters); i++) {
+        source = W_CacheLumpName(letters[i].lump, PU_CACHE);
+        for (x = 0; x < letters[i].width; x++, column++) {
+            post = (byte *)source
+                + LONG(source->columnofs[letters[i].first + x]);
+            extra->columnofs[column] = LONG(data - (byte *)extra);
+            M_CopyMenuColumn(data, post,
+                x == letters[i].trim_column ? letters[i].trim_top : 0,
+                x == letters[i].trim_column ? letters[i].trim_bottom : 0);
+            data += sizes[column];
+        }
+    }
+    return extra;
+}
+
+/* Keep the original main-menu patches, including the new matching label. */
+void M_DrawMainMenu(void)
+{
+    int y = MainDef.y + extraoptions * LINEHEIGHT;
+    V_DrawPatchDirect(94, 2, 0, W_CacheLumpName("M_DOOM", PU_CACHE));
+    V_DrawPatchDirect(MainDef.x, y, 0, M_ExtraOptionsPatch());
+    V_DrawPatchDirect(MainDef.x + 80, y, 0,
+        W_CacheLumpName("M_OPTION", PU_CACHE));
+}
 
 
 //
@@ -953,33 +1034,22 @@ char    detailNames[2][9]	= {"M_GDHIGH","M_GDLOW"};
 char	msgNames[2][9]		= {"M_MSGOFF","M_MSGON"};
 
 
-/* Collapse the two legacy slider spacer rows in the compact Options page. */
-static int M_SettingsOptionY(int item)
-{
-    return 44 + LINEHEIGHT * (item - (item > option_empty1)
-        - (item > option_empty2));
-}
-
-/* Keep every option and its slider above the status bar, in one font. */
+/* Preserve the original Options artwork, values, and slider spacing. */
 void M_DrawOptions(void)
 {
-    static char *labels[] = {"END GAME", "MESSAGES", "GRAPHIC DETAIL",
-        "SCREEN SIZE", "", "MOUSE SENSITIVITY", "", "SOUND VOLUME",
-        "SETTINGS"};
-    char *value;
-    int i;
+    V_DrawPatchDirect (108,15,0,W_CacheLumpName("M_OPTTTL",PU_CACHE));
 
-    V_DrawPatchDirect(108, 15, 0, W_CacheLumpName("M_OPTTTL", PU_CACHE));
-    for (i = 0; i < opt_end; i++)
-        if (OptionsMenu[i].status != -1)
-            M_WriteText(54, M_SettingsOptionY(i), labels[i]);
-    value = showMessages ? "ON" : "OFF";
-    M_WriteText(280 - M_StringWidth(value), M_SettingsOptionY(messages), value);
-    value = detailLevel ? "LOW" : "HIGH";
-    M_WriteText(280 - M_StringWidth(value), M_SettingsOptionY(detail), value);
-    M_DrawThermo(184, M_SettingsOptionY(mousesens) - 2, 10, mouseSensitivity);
-    M_DrawThermo(184, M_SettingsOptionY(scrnsize) - 2, 9, screenSize);
-    M_WriteText(54, 156, "ESC: BACK");
+    V_DrawPatchDirect (OptionsDef.x + 175,OptionsDef.y+LINEHEIGHT*detail,0,
+		       W_CacheLumpName(detailNames[detailLevel],PU_CACHE));
+
+    V_DrawPatchDirect (OptionsDef.x + 120,OptionsDef.y+LINEHEIGHT*messages,0,
+		       W_CacheLumpName(msgNames[showMessages],PU_CACHE));
+
+    M_DrawThermo(OptionsDef.x,OptionsDef.y+LINEHEIGHT*(mousesens+1),
+		 10,mouseSensitivity);
+
+    M_DrawThermo(OptionsDef.x,OptionsDef.y+LINEHEIGHT*(scrnsize+1),
+		 9,screenSize);
 }
 
 void M_Options(int choice)
@@ -1060,68 +1130,6 @@ void M_FinishReadThis(int choice)
 {
     choice = 0;
     M_SetupNextMenu(&MainDef);
-}
-
-
-
-
-//
-// M_QuitDOOM
-//
-int     quitsounds[8] =
-{
-    sfx_pldeth,
-    sfx_dmpain,
-    sfx_popain,
-    sfx_slop,
-    sfx_telept,
-    sfx_posit1,
-    sfx_posit3,
-    sfx_sgtatk
-};
-
-int     quitsounds2[8] =
-{
-    sfx_vilact,
-    sfx_getpow,
-    sfx_boscub,
-    sfx_slop,
-    sfx_skeswg,
-    sfx_kntdth,
-    sfx_bspact,
-    sfx_sgtatk
-};
-
-
-
-void M_QuitResponse(int ch)
-{
-    if (ch != 'y')
-	return;
-    if (!netgame)
-    {
-	if (gamemode == commercial)
-	    S_StartSound(NULL,quitsounds2[(gametic>>2)&7]);
-	else
-	    S_StartSound(NULL,quitsounds[(gametic>>2)&7]);
-	I_WaitVBL(105);
-    }
-    I_Quit ();
-}
-
-
-
-
-void M_QuitDOOM(int choice)
-{
-  // We pick index 0 which is language sensitive,
-  //  or one at random, between 1 and maximum number.
-  if (language != english )
-    sprintf(endstring,"%s\n\n"DOSY, endmsg[0] );
-  else
-    sprintf(endstring,"%s\n\n"DOSY, endmsg[ (gametic%(NUM_QUITMESSAGES-2))+1 ]);
-  
-  M_StartMessage(endstring,M_QuitResponse,true);
 }
 
 
@@ -1349,42 +1357,50 @@ M_WriteText
 
 
 
-/* Native settings share Doom's menu navigation, font, cursor, and sounds. */
+/* Extra options use Doom's navigation, font, cursor, and sounds. */
 static void M_SettingsPage(int choice);
 static void M_SettingsDraw(void);
-static void M_SettingsVideo(int choice);
-static void M_SettingsPerformance(int choice);
+static void M_SettingsRendering(int choice);
+static void M_SettingsCRT(int choice);
+static void M_SettingsHUD(int choice);
 static void M_SettingsPreset(int choice);
+static void M_SettingsKeyPreset(int choice);
 static void M_SettingsBind(int choice);
-static void M_SettingsReset(int choice);
 
 static menuitem_t SettingsItems[] = {
-    {1, "", M_SettingsPage, 'v'},
-    {1, "", M_SettingsPage, 'p'},
-    {1, "", M_SettingsPage, 'k'},
-    {1, "", M_SettingsReset, 'r'}
+    {2, "", M_SettingsPreset, 'p'},
+    {1, "", M_SettingsPage, 'r'},
+    {1, "", M_SettingsPage, 'c'},
+    {1, "", M_SettingsPage, 'h'},
+    {1, "", M_SettingsPage, 'k'}
 };
 static menu_t SettingsMenu = {
-    4, &OptionsDef, SettingsItems, M_SettingsDraw, 54, 64, 0
+    5, &MainDef, SettingsItems, M_SettingsDraw, 54, 64, 0
 };
-static menuitem_t SettingsVideoItems[] = {
-    {2, "", M_SettingsVideo, 'r'}, {2, "", M_SettingsVideo, 'a'},
-    {2, "", M_SettingsVideo, 'e'}, {2, "", M_SettingsVideo, 'f'},
-    {2, "", M_SettingsVideo, 'c'}
+static menuitem_t SettingsRenderingItems[] = {
+    {2, "", M_SettingsRendering, 'r'}, {2, "", M_SettingsRendering, 'a'},
+    {2, "", M_SettingsRendering, 'e'}, {2, "", M_SettingsRendering, 'f'},
+    {2, "", M_SettingsRendering, 'u'}
 };
-static menu_t SettingsVideoMenu = {
-    sizeof(SettingsVideoItems) / sizeof(*SettingsVideoItems),
-    &SettingsMenu, SettingsVideoItems, M_SettingsDraw, 54, 64, 0
+static menu_t SettingsRenderingMenu = {
+    5, &SettingsMenu, SettingsRenderingItems, M_SettingsDraw, 54, 64, 0
 };
-static menuitem_t SettingsPerformanceItems[] = {
-    {2, "", M_SettingsPerformance, 'u'}, {2, "", M_SettingsPerformance, 'f'}
+/* Future controls remain visible but cannot receive focus or change state. */
+static menuitem_t SettingsCRTItems[] = {
+    {2, "", M_SettingsCRT, 'c'}, {-1, "", NULL, 0}, {-1, "", NULL, 0}
 };
-static menu_t SettingsPerformanceMenu = {
-    2, &SettingsMenu, SettingsPerformanceItems, M_SettingsDraw, 54, 64, 0
+static menu_t SettingsCRTMenu = {
+    3, &SettingsMenu, SettingsCRTItems, M_SettingsDraw, 54, 64, 0
+};
+static menuitem_t SettingsHUDItems[] = {
+    {2, "", M_SettingsHUD, 'f'}, {-1, "", NULL, 0}
+};
+static menu_t SettingsHUDMenu = {
+    2, &SettingsMenu, SettingsHUDItems, M_SettingsDraw, 54, 64, 0
 };
 static menuitem_t SettingsKeyboardItems[] = {
-    {1, "", M_SettingsPage, 'm'}, {1, "", M_SettingsPage, 'a'},
-    {2, "", M_SettingsPreset, 'p'}
+    {2, "", M_SettingsKeyPreset, 'p'},
+    {1, "", M_SettingsPage, 'm'}, {1, "", M_SettingsPage, 'a'}
 };
 static menu_t SettingsKeyboardMenu = {
     3, &SettingsMenu, SettingsKeyboardItems, M_SettingsDraw, 54, 64, 0
@@ -1399,32 +1415,45 @@ static menu_t SettingsMovementMenu = {
 };
 static menuitem_t SettingsActionItems[] = {
     {1, "", M_SettingsBind, 'f'}, {1, "", M_SettingsBind, 'u'},
-    {1, "", M_SettingsBind, 's'}, {1, "", M_SettingsBind, 'r'}
+    {1, "", M_SettingsBind, 's'}, {1, "", M_SettingsBind, 'r'},
+    {1, "", M_SettingsBind, 't'}
 };
 static menu_t SettingsActionMenu = {
-    4, &SettingsKeyboardMenu, SettingsActionItems, M_SettingsDraw, 54, 64, 0
+    5, &SettingsKeyboardMenu, SettingsActionItems, M_SettingsDraw, 54, 64, 0
 };
 
-/* Match g_game.c defaults; preset changes never alter menu navigation. */
-static int settings_presets[2][10] = {
+/* Original and WASD bindings also belong to the global presets. */
+static int settings_keys[2][M_BINDING_COUNT] = {
     {KEY_UPARROW, KEY_DOWNARROW, KEY_LEFTARROW, KEY_RIGHTARROW,
-     ',', '.', KEY_RCTRL, ' ', KEY_RALT, KEY_RSHIFT},
+     ',', '.', KEY_RCTRL, ' ', KEY_RALT, KEY_RSHIFT, KEY_TAB},
     {'w', 's', KEY_LEFTARROW, KEY_RIGHTARROW,
-     'a', 'd', KEY_RCTRL, 'e', KEY_RALT, KEY_RSHIFT}
+     'a', 'd', KEY_RCTRL, 'e', KEY_RALT, KEY_RSHIFT, KEY_TAB}
 };
 static int settings_capture = -1;
 static char *settings_binding_hint = "ENTER: CHANGE KEY  ESC: BACK";
 
-/* Derive the preset label from bindings, including individually edited keys. */
-static int M_SettingsPresetIndex(void)
+/* Match the actual values so individual edits and restored storage show Custom. */
+static int M_SettingsKeyPresetIndex(void)
 {
     int preset, action;
     for (preset = 0; preset < 2; preset++) {
-        for (action = 0; action < 10; action++)
-            if (*M_Binding(action) != settings_presets[preset][action]) break;
-        if (action == 10) return preset;
+        for (action = 0; action < M_BINDING_COUNT; action++)
+            if (*M_Binding(action) != settings_keys[preset][action]) break;
+        if (action == M_BINDING_COUNT) return preset;
     }
     return 2;
+}
+
+/* Default and Emulation differ only in their CRT shader. */
+static int M_SettingsPresetIndex(void)
+{
+    int keys = M_SettingsKeyPresetIndex();
+    if (m_show_fps || screenblocks != 10) return 3;
+    if (m_resolution == 1 && !m_aspect && !m_renderer && !m_freelook
+        && !m_unlocked && !keys && (m_crt == 0 || m_crt == 1)) return m_crt;
+    if (!m_resolution && m_aspect && m_renderer && m_freelook
+        && m_unlocked && !m_crt && keys == 1) return 2;
+    return 3;
 }
 
 /* Show engine key names without introducing font or browser dependencies. */
@@ -1439,6 +1468,7 @@ static char *M_SettingsKeyName(int key)
     case KEY_RCTRL: return "CTRL";
     case KEY_RALT: return "ALT";
     case KEY_RSHIFT: return "SHIFT";
+    case KEY_TAB: return "TAB";
     case KEY_ENTER: return "ENTER";
     case KEY_BACKSPACE: return "BACKSPACE";
     case ' ': return "SPACE";
@@ -1468,66 +1498,75 @@ static void M_SettingsRow(int row, char *label, char *value)
     if (value) M_WriteText(settings_value_x - M_StringWidth(value), y, value);
 }
 
-/* Draw the selected settings page using IWAD artwork and the HUD font. */
+/* Draw the selected page entirely inside the 320x168 area above the HUD. */
 static void M_SettingsDraw(void)
 {
-    static char *root[] = {"VIDEO", "PERFORMANCE", "KEYBOARD",
-        "RESTORE DEFAULTS"};
+    static char *root[] = {"PRESET", "RENDERING", "CRT EMULATION", "HUD",
+        "KEYBOARD"};
+    static char *presets[] = {"DEFAULT", "EMULATION", "MODERN", "CUSTOM"};
     static char *actions[] = {"FORWARD", "BACKWARD", "TURN LEFT",
         "TURN RIGHT", "STRAFE LEFT", "STRAFE RIGHT", "FIRE", "USE / OPEN",
-        "STRAFE MODIFIER", "RUN"};
+        "STRAFE MODIFIER", "RUN", "TOGGLE AUTOMAP"};
     static char *resolutions[] = {"NATIVE", "320X200", "640X400", "960X600",
         "1280X800", "1600X1000", "1920X1200"};
-    static char *presets[] = {"ORIGINAL", "WASD", "CUSTOM"};
-    static char *video[] = {"RESOLUTION", "ASPECT RATIO", "RENDERER",
-        "FREE LOOK", "CRT FILTER"};
+    static char *keys[] = {"ORIGINAL", "WASD", "CUSTOM"};
+    static char *rendering[] = {"RESOLUTION", "ASPECT RATIO", "RENDERER",
+        "FREE LOOK", "UNLOCK FPS"};
     static char *crt[] = {"OFF", "CLEAN CRT", "LOTTES", "CRT-PI",
         "EASYMODE", "ROYALE"};
+    static char *crt_labels[] = {"CRT SHADER", "BLACK LEVEL", "ADDITIONAL BLOOM"};
     static char *crt_help[] = {"ORIGINAL PIXELS", "GENTLE BLENDING",
         "RGB ARCADE MONITOR", "LIGHTWEIGHT SCANLINES",
         "FLAT APERTURE GRILLE", "DETAILED TUBE - HIGH GPU COST"};
-    static char *performance[] = {"UNLOCK FPS", "FPS COUNTER"};
-    static char *keyboard[] = {"MOVEMENT", "ACTIONS", "PRESET"};
+    static char *hud[] = {"FPS COUNTER", "STATUS BAR HEIGHT"};
+    static char *keyboard[] = {"PRESET", "MOVEMENT", "ACTIONS"};
     char dimensions[32];
-    char *title = "SETTINGS";
-    char *hint = "ESC: BACK";
+    char *title = "EXTRA OPTIONS";
+    char *hint = "LEFT/RIGHT: CHANGE  ESC: BACK";
+    char *description = NULL;
     int i, first;
 
     V_DrawPatchDirect(108, 15, 0, W_CacheLumpName("M_OPTTTL", PU_CACHE));
     if (currentMenu == &SettingsMenu) {
-        M_SettingsLayout(root, 4, NULL);
-        for (i = 0; i < 4; i++) M_SettingsRow(i, root[i], NULL);
-    } else if (currentMenu == &SettingsVideoMenu) {
-        title = "VIDEO";
-        M_SettingsLayout(video, currentMenu->numitems, "1920X1200");
-        M_SettingsRow(0, video[0], resolutions[m_resolution]);
-        M_SettingsRow(1, video[1], m_aspect ? "BROWSER" : "4:3");
-        M_SettingsRow(2, video[2], m_renderer ? "WEBGL" : "SOFTWARE");
-        M_SettingsRow(3, video[3], !m_renderer ? "N/A"
+        M_SettingsLayout(root, 5, "EMULATION");
+        M_SettingsRow(0, root[0], presets[M_SettingsPresetIndex()]);
+        for (i = 1; i < 5; i++) M_SettingsRow(i, root[i], NULL);
+        hint = itemOn ? "ENTER: OPEN  ESC: BACK" : hint;
+    } else if (currentMenu == &SettingsRenderingMenu) {
+        title = "RENDERING";
+        M_SettingsLayout(rendering, 5, "1920X1200");
+        M_SettingsRow(0, rendering[0], resolutions[m_resolution]);
+        M_SettingsRow(1, rendering[1], m_aspect ? "BROWSER" : "4:3");
+        M_SettingsRow(2, rendering[2], m_renderer ? "WEBGL" : "SOFTWARE");
+        M_SettingsRow(3, rendering[3], !m_renderer ? "N/A"
             : m_freelook ? "ON" : "OFF");
-        M_SettingsRow(4, video[4], crt[m_crt]);
+        M_SettingsRow(4, rendering[4], m_unlocked ? "ON" : "OFF");
         sprintf(dimensions, "%d X %d", vid_width, vid_height);
         M_WriteText((320 - M_StringWidth(dimensions)) / 2, 136, dimensions);
-        if (m_gpu_failed || m_crt_failed) {
-            strcpy(dimensions, "WEBGL UNAVAILABLE");
-            M_WriteText((320 - M_StringWidth(dimensions)) / 2, 146, dimensions);
-        } else {
-            char *description = crt_help[m_crt];
-            M_WriteText((320 - M_StringWidth(description)) / 2, 146, description);
-        }
-        hint = "LEFT/RIGHT: CHANGE  ESC: BACK";
-    } else if (currentMenu == &SettingsPerformanceMenu) {
-        title = "PERFORMANCE";
-        M_SettingsLayout(performance, 2, "OFF");
-        M_SettingsRow(0, performance[0], m_unlocked ? "ON" : "OFF");
-        M_SettingsRow(1, performance[1], m_show_fps ? "ON" : "OFF");
-        hint = "LEFT/RIGHT: CHANGE  ESC: BACK";
+        if (m_gpu_failed) description = "WEBGL UNAVAILABLE";
+        else if (itemOn == 3 && !m_renderer) description = "REQUIRES WEBGL";
+    } else if (currentMenu == &SettingsCRTMenu) {
+        title = "CRT EMULATION";
+        M_SettingsLayout(crt_labels, 3, "CLEAN CRT");
+        M_SettingsRow(0, crt_labels[0], crt[m_crt]);
+        M_SettingsRow(1, crt_labels[1], "SOON");
+        M_SettingsRow(2, crt_labels[2], "SOON");
+        M_WriteText((320 - M_StringWidth("SOON: NOT AVAILABLE YET")) / 2,
+            120, "SOON: NOT AVAILABLE YET");
+        description = m_crt_failed ? "WEBGL UNAVAILABLE" : crt_help[m_crt];
+    } else if (currentMenu == &SettingsHUDMenu) {
+        title = "HUD";
+        M_SettingsLayout(hud, 2, "SOON");
+        M_SettingsRow(0, hud[0], m_show_fps ? "ON" : "OFF");
+        M_SettingsRow(1, hud[1], "SOON");
+        description = "SOON: NOT AVAILABLE YET";
     } else if (currentMenu == &SettingsKeyboardMenu) {
         title = "KEYBOARD";
         M_SettingsLayout(keyboard, 3, "ORIGINAL");
-        M_SettingsRow(0, keyboard[0], NULL);
+        M_SettingsRow(0, keyboard[0], keys[M_SettingsKeyPresetIndex()]);
         M_SettingsRow(1, keyboard[1], NULL);
-        M_SettingsRow(2, keyboard[2], presets[M_SettingsPresetIndex()]);
+        M_SettingsRow(2, keyboard[2], NULL);
+        hint = itemOn ? "ENTER: OPEN  ESC: BACK" : hint;
     } else {
         first = currentMenu == &SettingsMovementMenu ? 0 : 6;
         title = first ? "ACTIONS" : "MOVEMENT";
@@ -1537,30 +1576,36 @@ static void M_SettingsDraw(void)
                 ? "?" : M_SettingsKeyName(*M_Binding(first + i)));
         hint = settings_binding_hint;
     }
+    if (description)
+        M_WriteText((320 - M_StringWidth(description)) / 2, 146, description);
     M_WriteText((320 - M_StringWidth(title)) / 2, 38, title);
     M_WriteText((320 - M_StringWidth(hint)) / 2, 156, hint);
 }
 
-/* Enter settings from Options, preserving each page's last selected row. */
-static void M_SettingsSettings(int choice)
+/* Enter Extra Options directly from the main menu. */
+static void M_ExtraOptions(int choice)
 {
     M_SetupNextMenu(&SettingsMenu);
 }
 
-/* Follow the two-level category hierarchy without a separate UI framework. */
+/* Keep category routing and each page's previous-menu pointer together. */
 static void M_SettingsPage(int choice)
 {
-    if (currentMenu == &SettingsMenu)
-        M_SetupNextMenu(choice == 0 ? &SettingsVideoMenu
-            : choice == 1 ? &SettingsPerformanceMenu : &SettingsKeyboardMenu);
-    else {
+    if (currentMenu == &SettingsMenu) {
+        switch (choice) {
+        case 1: M_SetupNextMenu(&SettingsRenderingMenu); break;
+        case 2: M_SetupNextMenu(&SettingsCRTMenu); break;
+        case 3: M_SetupNextMenu(&SettingsHUDMenu); break;
+        case 4: M_SetupNextMenu(&SettingsKeyboardMenu); break;
+        }
+    } else {
         settings_binding_hint = "ENTER: CHANGE KEY  ESC: BACK";
-        M_SetupNextMenu(choice == 0 ? &SettingsMovementMenu : &SettingsActionMenu);
+        M_SetupNextMenu(choice == 1 ? &SettingsMovementMenu : &SettingsActionMenu);
     }
 }
 
-/* Notify JavaScript; buffer resizing occurs only after the engine returns. */
-static void M_SettingsVideo(int choice)
+/* Resize and switch backends only after the engine returns to JavaScript. */
+static void M_SettingsRendering(int choice)
 {
     if (itemOn == 0)
         m_resolution = (m_resolution + (choice ? 1 : 6)) % 7;
@@ -1569,25 +1614,52 @@ static void M_SettingsVideo(int choice)
         m_renderer = !m_renderer;
         if (!m_renderer) m_freelook = 0;
     } else if (itemOn == 3 && m_renderer) m_freelook = !m_freelook;
-    else if (itemOn == 4) m_crt = (m_crt + (choice ? 1 : 5)) % 6;
+    else if (itemOn == 4) {
+        m_unlocked = !m_unlocked;
+        R_SetViewSize(screenblocks, detailLevel);
+    }
     I_SettingsChanged();
 }
 
-/* Presentation changes leave the simulation fixed at 35 ticks per second. */
-static void M_SettingsPerformance(int choice)
+/* Change the display filter independently of world rendering. */
+static void M_SettingsCRT(int choice)
 {
-    if (itemOn == 0) m_unlocked = !m_unlocked;
-    else m_show_fps = !m_show_fps;
+    m_crt = (m_crt + (choice ? 1 : 5)) % 6;
+    I_SettingsChanged();
+}
+
+/* Count presented frames; the simulation remains at 35 Hz. */
+static void M_SettingsHUD(int choice)
+{
+    m_show_fps = !m_show_fps;
+    I_SettingsChanged();
+}
+
+/* Apply presentation and keyboard presets without changing sound or game state. */
+static void M_SettingsPreset(int choice)
+{
+    int i, preset = M_SettingsPresetIndex();
+    preset = preset == 3 ? (choice ? 0 : 2)
+        : (preset + (choice ? 1 : 2)) % 3;
+    m_resolution = preset == 2 ? 0 : 1;
+    m_aspect = m_renderer = m_freelook = m_unlocked = preset == 2;
+    m_show_fps = m_gpu_failed = m_crt_failed = 0;
+    m_crt = preset == 1;
+    for (i = 0; i < M_BINDING_COUNT; i++)
+        *M_Binding(i) = settings_keys[preset == 2][i];
+    screenblocks = 10;
+    screenSize = 7;
     R_SetViewSize(screenblocks, detailLevel);
     I_SettingsChanged();
 }
 
-/* Cycle the two presets; either direction leaves custom bindings predictably. */
-static void M_SettingsPreset(int choice)
+/* Cycle keyboard presets, including the map toggle. */
+static void M_SettingsKeyPreset(int choice)
 {
-    int i, preset = M_SettingsPresetIndex();
+    int i, preset = M_SettingsKeyPresetIndex();
     preset = preset == 2 ? (choice ? 0 : 1) : !preset;
-    for (i = 0; i < 10; i++) *M_Binding(i) = settings_presets[preset][i];
+    for (i = 0; i < M_BINDING_COUNT; i++)
+        *M_Binding(i) = settings_keys[preset][i];
     I_SettingsChanged();
 }
 
@@ -1598,7 +1670,7 @@ static void M_SettingsBind(int choice)
     settings_binding_hint = "PRESS KEY. ESC: CANCEL";
 }
 
-/* Preserve menu, automap, pause, and weapon shortcuts when rebinding actions. */
+/* Preserve menu, pause, and weapon shortcuts when rebinding actions. */
 static boolean M_SettingsCapture(event_t *ev)
 {
     int i, key = ev->data1;
@@ -1609,14 +1681,14 @@ static boolean M_SettingsCapture(event_t *ev)
         return true;
     }
     if (!((key >= 32 && key <= 126) || key == KEY_ENTER
-        || key == KEY_BACKSPACE || key == KEY_UPARROW || key == KEY_DOWNARROW
-        || key == KEY_LEFTARROW || key == KEY_RIGHTARROW
+        || key == KEY_TAB || key == KEY_BACKSPACE || key == KEY_UPARROW
+        || key == KEY_DOWNARROW || key == KEY_LEFTARROW || key == KEY_RIGHTARROW
         || key == KEY_RCTRL || key == KEY_RALT || key == KEY_RSHIFT)
         || (key >= '1' && key <= '7') || key == '-' || key == '=') {
         settings_binding_hint = "RESERVED KEY. TRY ANOTHER";
         return true;
     }
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < M_BINDING_COUNT; i++) {
         if (i != settings_capture && *M_Binding(i) == key) {
             settings_binding_hint = "KEY IN USE. TRY ANOTHER";
             return true;
@@ -1628,21 +1700,6 @@ static boolean M_SettingsCapture(event_t *ev)
     S_StartSound(NULL, sfx_pistol);
     I_SettingsChanged();
     return true;
-}
-
-/* Restore classic presentation and bindings with the full status-bar view. */
-static void M_SettingsReset(int choice)
-{
-    int i;
-    m_resolution = 1;
-    m_aspect = m_unlocked = m_show_fps = 0;
-    m_renderer = m_freelook = m_gpu_failed = 0;
-    m_crt = m_crt_failed = 0;
-    for (i = 0; i < 10; i++) *M_Binding(i) = settings_presets[0][i];
-    screenblocks = 10;
-    screenSize = 7;
-    R_SetViewSize(screenblocks, detailLevel);
-    I_SettingsChanged();
 }
 
 /* Render the counter with the game's own font, inside the framebuffer. */
@@ -1907,11 +1964,6 @@ boolean M_Responder (event_t* ev)
 	    M_QuickLoad();
 	    return true;
 				
-	  case KEY_F10:           // Quit DOOM
-	    S_StartSound(NULL,sfx_swtchn);
-	    M_QuitDOOM(0);
-	    return true;
-				
 	  case KEY_F11:           // gamma toggle
 	    usegamma++;
 	    if (usegamma > 4)
@@ -2109,10 +2161,9 @@ void M_Drawer (void)
 	currentMenu->routine();         // call Draw routine
     
     /* The compact font needs a matching cursor, aligned with its actual rows. */
-    if (currentMenu == &OptionsDef || currentMenu->routine == M_SettingsDraw) {
-        x = currentMenu == &OptionsDef ? 54 : currentMenu->x;
-        y = currentMenu == &OptionsDef ? M_SettingsOptionY(itemOn)
-            : currentMenu->y + itemOn * LINEHEIGHT;
+    if (currentMenu->routine == M_SettingsDraw) {
+        x = currentMenu->x;
+        y = currentMenu->y + itemOn * LINEHEIGHT;
         V_DrawHalfPatch(x - 20, y - 1,
             W_CacheLumpName(skullName[whichSkull], PU_CACHE));
         return;
@@ -2200,7 +2251,6 @@ void M_Init (void)
 	// This is used because DOOM 2 had only one HELP
         //  page. I use CREDIT as second page now, but
 	//  kept this hack for educational purposes.
-	MainMenu[readthis] = MainMenu[quitdoom];
 	MainDef.numitems--;
 	MainDef.y += 8;
 	NewDef.prevMenu = &MainDef;

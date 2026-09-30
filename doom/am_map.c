@@ -28,6 +28,7 @@ static const char rcsid[] = "$Id: am_map.c,v 1.4 1997/02/03 21:24:33 b1 Exp $";
 
 #include "z_zone.h"
 #include "doomdef.h"
+#include "m_settings.h"
 #include "st_stuff.h"
 #include "p_local.h"
 #include "w_wad.h"
@@ -93,8 +94,6 @@ static const char rcsid[] = "$Id: am_map.c,v 1.4 1997/02/03 21:24:33 b1 Exp $";
 #define AM_PANLEFTKEY	KEY_LEFTARROW
 #define AM_ZOOMINKEY	'='
 #define AM_ZOOMOUTKEY	'-'
-#define AM_STARTKEY	KEY_TAB
-#define AM_ENDKEY	KEY_TAB
 #define AM_GOBIGKEY	'0'
 #define AM_FOLLOWKEY	'f'
 #define AM_GRIDKEY	'g'
@@ -622,17 +621,22 @@ AM_Responder
 
     rc = false;
 
-    if (!automapactive)
-    {
-	if (ev->type == ev_keydown && ev->data1 == AM_STARTKEY)
-	{
-	    AM_Start ();
-	    viewactive = false;
-	    rc = true;
-	}
+    /* Handle the rebindable toggle before fixed automap navigation keys. */
+    if (ev->type == ev_keydown && ev->data1 == key_map) {
+        if (automapactive) {
+            bigstate = 0;
+            viewactive = true;
+            AM_Stop();
+        } else {
+            AM_Start();
+            viewactive = false;
+        }
+        return true;
     }
 
-    else if (ev->type == ev_keydown)
+    if (!automapactive) return false;
+
+    if (ev->type == ev_keydown)
     {
 
 	rc = true;
@@ -661,11 +665,6 @@ AM_Responder
 	  case AM_ZOOMINKEY: // zoom in
 	    mtof_zoommul = M_ZOOMIN;
 	    ftom_zoommul = M_ZOOMOUT;
-	    break;
-	  case AM_ENDKEY:
-	    bigstate = 0;
-	    viewactive = true;
-	    AM_Stop ();
 	    break;
 	  case AM_GOBIGKEY:
 	    bigstate = !bigstate;

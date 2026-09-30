@@ -21,8 +21,8 @@ export async function testRenderer(evaluate, send) {
       for (let i = 0; i < 8 && (e._web_state() & 16); i++) key(27);
     };
     const video = () => {
-      close(); key(27); key(111); key(13); key(116); key(13);
-      key(118); key(13);
+      close(); key(27); key(101); key(13);
+      key(114); key(13);
     };
     const read = () => {
       Doom.draw();
