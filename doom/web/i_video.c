@@ -73,20 +73,14 @@ void I_FinishUpdate(void)
 {
     int i;
     byte *source = screens[0];
+#ifdef HARDWARE_RENDER
+    if (r_hardware_frame && !d_wiping) return;
+#endif
     if (vid_width != 320 || vid_height != 200 || vid_square_pixels) {
         if (gamestate != GS_LEVEL || automapactive || d_wiping)
             V_BlitView();
         source = vid_screen;
     }
-#ifdef HARDWARE_RENDER
-    if (r_hardware_frame && !d_wiping) {
-        source = vid_screen;
-        for (i = 0; i < vid_width * vid_height; i++)
-            web_rgba[i] = (colors[source[i]] & 0xffffffu)
-                | ((unsigned int)vid_alpha[i] << 24);
-        return;
-    }
-#endif
     for (i = 0; i < vid_width * vid_height; i++)
         web_rgba[i] = colors[source[i]];
 }

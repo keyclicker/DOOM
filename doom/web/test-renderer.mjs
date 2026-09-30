@@ -92,13 +92,15 @@ export async function testRenderer(evaluate, send) {
     check(e._web_world(), 'Returning from automap lost the renderer');
     // Freeze face animation and compare the exact native status bar pixels.
     const gpu = read();
-    const overlay = e.HEAPU8.subarray(e._web_pixels(), e._web_pixels() + 256000);
+    Settings.value.renderer = false; Settings.apply(); software();
+    const overlay = e.HEAPU8.slice(e._web_pixels(), e._web_pixels() + 256000);
     for (let y = 168; y < 200; y++) for (let x = 0; x < 320; x++) {
       const at = (y * 320 + x) * 4, flipped = ((199 - y) * 320 + x) * 4;
       check(overlay[at + 3] === 255, 'Status bar lost alpha coverage');
       for (let c = 0; c < 3; c++)
         check(gpu[flipped + c] === overlay[at + c], 'Status bar colors differ');
     }
+    Settings.value.renderer = true; Settings.apply(); render();
     Doom.gpuTest = {tick, key, close, video, read, hash, render, check};
     return {center, up, down, pitches, triangles: Doom.graphics.triangles};
   }.toString()})()`);
@@ -167,7 +169,7 @@ export async function testRenderer(evaluate, send) {
   // Exercise real canvas resizing, Retina dimensions and the reduced view.
   const sizes = [];
   for (const [width, height, dpr] of [[640, 480, 1], [1280, 720, 2],
-    [1920, 1080, 2], [480, 800, 2]]) {
+    [1920, 1080, 2], [480, 800, 2], [887, 553, 2]]) {
     await send('Emulation.setDeviceMetricsOverride', {
       width, height, deviceScaleFactor: dpr, mobile: false,
     });
@@ -178,18 +180,81 @@ export async function testRenderer(evaluate, send) {
       const e = Doom.engine;
       e._web_render(65536); Doom.draw();
       const gl = Doom.graphics.gl;
+      const upload = gl.texSubImage2D;
+      const uploads = [];
+      gl.texSubImage2D = function(...args) {
+        uploads.push(args[8].byteLength);
+        return upload.apply(this, args);
+      };
+      try { Doom.draw(); } finally { gl.texSubImage2D = upload; }
+      Doom.gpuTest.check(uploads.length === 1 && uploads[0] === 1024000,
+        'World presentation uploaded a screen-sized CPU framebuffer');
       gl.finish();
       const start = performance.now();
       for (let i = 0; i < 5; i++) { e._web_render(65536); Doom.draw(); }
       gl.finish();
+      const frameMs = (performance.now() - start) / 5;
       if (gl.getError()) throw Error('WebGL resize failed');
+      // Isolate engine CPU work from the VM's software GPU implementation.
+      const world = Doom.graphics.world;
+      const cpu = [];
+      Doom.graphics.world = () => {};
+      try {
+        for (let i = 0; i < 45; i++) {
+          const begin = performance.now(); e._web_render(65536);
+          if (i >= 5) cpu.push(performance.now() - begin);
+        }
+      } finally { Doom.graphics.world = world; }
+      cpu.sort((a, b) => a - b);
       const info = gl.getExtension('WEBGL_debug_renderer_info');
       return {size: [Doom.canvas.width, Doom.canvas.height],
-        frameMs: (performance.now() - start) / 5,
+        frameMs, cpuMedianMs: cpu[20],
+        uploadBytes: uploads[0],
         device: info && gl.getParameter(info.UNMASKED_RENDERER_WEBGL)};
     })()`);
     assert.deepEqual(result.size, [width * dpr, height * dpr]);
     sizes.push(result);
+
+    // Freeze simulation and compare GPU artwork to the actual software path.
+    // Reduced views cover borders; help art covers overlapping anchor layers.
+    await evaluate(`(${function () {
+      const e = Doom.engine;
+      const {key, read, check, close} = Doom.gpuTest;
+      const compare = help => {
+        e._web_render(65536);
+        const gpu = read();
+        const [vx, vy, vw, vh] = Doom.graphics.lastCamera.slice(7, 11);
+        const [ax, ay, aw, ah] = new Int32Array(e.HEAPU8.buffer,
+          e._web_overlay_layout(), 4);
+        const {width, height} = Doom.canvas;
+        Settings.value.renderer = false; Settings.apply();
+        e._web_render(65536);
+        const cpu = e.HEAPU8.subarray(e._web_pixels(),
+          e._web_pixels() + width * height * 4);
+        let compared = 0;
+        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+          const artwork = help && x >= ax && x < ax + aw
+            && y >= ay && y < ay + ah;
+          if (!artwork && x >= vx && x < vx + vw && y >= vy && y < vy + vh)
+            continue;
+          const at = (y * width + x) * 4;
+          const flipped = ((height - 1 - y) * width + x) * 4;
+          for (let c = 0; c < 3; c++)
+            if (gpu[flipped + c] !== cpu[at + c])
+              throw Error('Artwork differs at ' + x + ',' + y + ', help=' + help
+                + ': GPU ' + gpu.slice(flipped, flipped + 3)
+                + ', CPU ' + cpu.slice(at, at + 3));
+          compared++;
+        }
+        check(compared > width * height / 100, 'Artwork comparison too small');
+        Settings.value.renderer = true; Settings.apply();
+      };
+      compare(false);
+      for (let i = 0; i < 5; i++) key(45);
+      compare(false);
+      key(187); compare(true); close();
+      for (let i = 0; i < 5; i++) key(61);
+    }.toString()})()`);
   }
   await send('Emulation.clearDeviceMetricsOverride');
   await evaluate(`(() => {

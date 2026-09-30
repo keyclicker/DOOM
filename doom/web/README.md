@@ -125,7 +125,10 @@ You can select WebGL again to retry after context loss.
 - `web/i_render.c` implements `i_render.h`; `render.js` submits triangles
   directly to WebGL 2. Indexed texture and COLORMAP lookups retain the WAD's
   palette, gamma, damage flashes and power-up colors. The native status bar,
-  menus and text composite over the world with explicit alpha coverage.
+  menus and text stay in four 320×200 indexed layers (center, bottom, top,
+  and view border). Paint-order tags preserve overlapping artwork; the GPU
+  scales and composites it, including status-bar gutters. Normal world frames
+  never expand the HUD into a screen-sized CPU RGBA buffer.
   Fuzz uses a GPU scene copy only when needed. Wipes capture the last frame
   once; normal gameplay performs no GPU readback.
 - `r_*.c` use bounded larger work arrays, 16-bit visplane row coordinates,
@@ -191,10 +194,10 @@ Representative builds with Emscripten 6.0.9:
 
 | File | Raw | Gzip |
 | --- | ---: | ---: |
-| `index.html` | 106 KB | 31 KB |
+| `index.html` | 109 KB | 32 KB |
 | `doom.wasm` | 319 KB | 150 KB |
 | `music.wasm` | 26 KB | 10 KB |
-| Total | 451 KB | 190 KB |
+| Total | 454 KB | 191 KB |
 
 The build prints exact raw and gzip sizes; compressed sizes require HTTP
 compression by the hosting server. Music adds about 11 KB compressed,
@@ -214,9 +217,19 @@ widescreen modes grows memory as needed. Canvas views are reused until the
 resolution or WASM memory changes; sample buffers are
 decoded once. Software startup creates no WebGL context. Enabling WebGL
 allocates a bounded RG8 material atlas (up to 32 MiB), a reusable vertex
-buffer, and color/depth/UI targets at the selected resolution. Materials and
-buffers are reused across frames and renderer toggles. The GPU handles the
-level geometry; the engine still runs gameplay and native UI drawing.
+buffer, color/depth targets at the selected resolution, and a fixed 1,024,000-byte
+artwork texture. A screen-sized RGBA upload is needed only for software frames
+(automap, full-screen art, and wipes). Materials and buffers are reused across
+frames and renderer toggles. The GPU handles the level geometry and artwork
+scaling; the engine still runs gameplay and logical UI drawing.
+
+At 3456×2234, keeping artwork logical reduced its per-frame upload from
+30.9 MB to 1.0 MB. A warmed E1M1 benchmark on the Linux VM measured engine
+rendering CPU time dropping from 17.4 ms to 0.2 ms, with GPU submission disabled
+to isolate geometry generation and HUD work. At 3840×2160 it fell from 19.2 ms
+to 0.2 ms. These timings exclude GPU execution, browser compositing, and display
+latency; they are not end-to-end FPS measurements. The GPU test reports isolated
+CPU timing and checks that artwork uploads stay fixed as resolution increases.
 
 The GPU regression suite uses Chromium/SwiftShader on the test VM. It checks
 WebGL correctness, including 4K and Retina modes, but does not measure physical
@@ -259,7 +272,10 @@ and gameplay screenshots during the test.
 `test-renderer.mjs` checks the opt-in menu, camera-only pitch, interpolation,
 exact status-bar colors/coverage, software round trips, automap, four headings
 and extreme pitch on all 77 maps, native/Retina modes through 4K, every view
-size, unavailable-WebGL fallback, and context loss/recovery. Original demos also run through WebGL to
+size, unavailable-WebGL fallback, and context loss/recovery. Artwork is compared
+against the software renderer at native, Retina, portrait, and fractional sizes,
+including reduced-view borders and overlapping full-screen help art.
+Original demos also run through WebGL to
 exercise moving sectors, combat and transitions. Chromium's explicit
 SwiftShader flag is for testing only; the shipped page uses the browser's
 normal WebGL device selection.

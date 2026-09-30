@@ -16,7 +16,23 @@ int vid_width = 320, vid_height = 200;
 int vid_square_pixels, v_ui_anchor;
 byte *vid_screen;
 #ifdef HARDWARE_RENDER
-byte *vid_alpha;
+uint32_t v_overlay[V_UI_LAYERS][320 * 200];
+v_overlay_layout_t v_overlay_layout;
+static uint32_t overlay_order;
+
+/* Keep artwork work independent of window size, including Retina displays. */
+void V_BeginOverlay(void)
+{
+    memset(v_overlay, 0, sizeof(v_overlay));
+    overlay_order = 0;
+    v_overlay_layout.status_sides = 0;
+}
+
+/* Preserve paint order when differently anchored artwork overlaps. */
+static void overlay_pixel(int layer, int offset, byte color)
+{
+    v_overlay[layer][offset] = (++overlay_order << 8) | color;
+}
 #endif
 int v_ui_height = 200;
 static int ui_width = 320, ui_x, ui_y;
@@ -33,16 +49,19 @@ boolean V_SetMode(int width, int height, int square_pixels)
     vid_square_pixels = !!square_pixels;
     vid_screen = M_Realloc(vid_screen, width * vid_height);
     memset(vid_screen, 0, width * vid_height);
-#ifdef HARDWARE_RENDER
-    vid_alpha = M_Realloc(vid_alpha, width * height);
-    memset(vid_alpha, 255, width * height);
-#endif
     ui_width = height * (vid_square_pixels ? 4 : 8) / (vid_square_pixels ? 3 : 5);
     if (ui_width > width) ui_width = width;
     v_ui_height = ui_width * (vid_square_pixels ? 3 : 5)
         / (vid_square_pixels ? 4 : 8);
     ui_x = (width - ui_width) / 2;
     ui_y = (vid_height - v_ui_height) / 2;
+#ifdef HARDWARE_RENDER
+    v_overlay_layout.x = ui_x;
+    v_overlay_layout.y = ui_y;
+    v_overlay_layout.width = ui_width;
+    v_overlay_layout.height = v_ui_height;
+    v_overlay_layout.square_pixels = vid_square_pixels;
+#endif
     V_BlitView();
     R_SetViewSize(screenblocks, detailLevel);
     return true;
@@ -53,6 +72,12 @@ static void ui_pixel(int x, int y, byte color)
 {
     int left, right, top, bottom, row;
     if ((unsigned)x >= 320 || (unsigned)y >= 200) return;
+#ifdef HARDWARE_RENDER
+    if (r_hardware_frame) {
+        overlay_pixel(v_ui_anchor, y * 320 + x, color);
+        return;
+    }
+#endif
     left = ui_x + x * ui_width / 320;
     right = ui_x + (x + 1) * ui_width / 320;
     row = v_ui_anchor == V_UI_BOTTOM ? vid_height - v_ui_height
@@ -61,9 +86,6 @@ static void ui_pixel(int x, int y, byte color)
     bottom = row + (y + 1) * v_ui_height / 200;
     for (row = top; row < bottom; row++) {
         memset(vid_screen + row * vid_width + left, color, right - left);
-#ifdef HARDWARE_RENDER
-        memset(vid_alpha + row * vid_width + left, 255, right - left);
-#endif
     }
 }
 
@@ -145,6 +167,12 @@ void V_CopyViewBorder(int offset, int count)
 #endif
         )) return;
     for (i = offset; i < offset + count && i < 64000; i++) {
+#ifdef HARDWARE_RENDER
+        if (r_hardware_frame) {
+            overlay_pixel(V_UI_BORDER, i, screens[0][i]);
+            continue;
+        }
+#endif
         x = i % 320;
         y = i / 320;
         left = x * vid_width / 320;
@@ -152,13 +180,17 @@ void V_CopyViewBorder(int offset, int count)
         for (row = y * (vid_height - 32 * v_ui_height / 200) / 168;
              row < (y + 1) * (vid_height - 32 * v_ui_height / 200) / 168
                 && row < vid_height; row++) {
-#ifdef HARDWARE_RENDER
-            memset(vid_alpha + row * vid_width + left, 255, right - left);
-#endif
             memset(vid_screen + row * vid_width + left, screens[0][i],
                 right - left);
         }
     }
+}
+
+/* Use the same WAD artwork for status gutters on every renderer. */
+byte *V_BackgroundFlat(void)
+{
+    return W_CacheLumpName(gamemode == commercial ? "GRNROCK" : "FLOOR7_2",
+        PU_CACHE);
 }
 
 /* Tile the original backdrop beside the centered status bar on wide views. */
@@ -167,15 +199,17 @@ void V_FillStatusSides(void)
     int x, y, first;
     byte *flat;
     if (!vid_screen || !ui_x || R_LogicalHeight() == 200) return;
-    flat = W_CacheLumpName(gamemode == commercial ? "GRNROCK" : "FLOOR7_2",
-        PU_CACHE);
+#ifdef HARDWARE_RENDER
+    if (r_hardware_frame) {
+        v_overlay_layout.status_sides = 1;
+        return;
+    }
+#endif
+    flat = V_BackgroundFlat();
     first = vid_height - 32 * v_ui_height / 200;
     for (y = first; y < vid_height; y++) {
         for (x = 0; x < vid_width; x++) {
             if (x >= ui_x && x < ui_x + ui_width) continue;
-#ifdef HARDWARE_RENDER
-            vid_alpha[y * vid_width + x] = 255;
-#endif
             vid_screen[y * vid_width + x] =
                 flat[((y * 200 / vid_height) & 63) * 64
                     + ((x * (vid_square_pixels ? 240 : 200) / vid_height) & 63)];

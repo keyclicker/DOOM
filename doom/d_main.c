@@ -229,6 +229,10 @@ void D_Display (void)
     if (setsizeneeded)
     {
 	R_ExecuteSetViewSize ();
+#ifdef HARDWARE_RENDER
+        /* Repaint artwork when leaving the geometry framebuffer. */
+        if (r_hardware_frame) redrawsbar = true;
+#endif
 	oldgamestate = -1;                      // force background redraw
 	borderdrawcount = 3;
     }
@@ -249,7 +253,7 @@ void D_Display (void)
     r_hardware_frame = r_hardware && !wipe && gamestate == GS_LEVEL
         && !automapactive && gametic;
     if (r_hardware_frame) {
-        memset(vid_alpha, 0, vid_width * vid_height);
+        V_BeginOverlay();
         redrawsbar = true;
         borderdrawcount = 3;
     }
