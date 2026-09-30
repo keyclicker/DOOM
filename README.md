@@ -25,25 +25,64 @@ leaves your machine.
 Want the game inside too? DOOM + DOOM II is 25.8 MB of WADs.
 Packed with the engine: **one 6.7 MB file**.
 
-## What you get
+## Why it's cool
 
-- **The real engine.** id's gameplay code and fixed-point math run as
-  shipped. The original 1.9 demos still play, and all 77 maps load and
-  save.
-- **The real renderer, and a new one.** Doom's software renderer is the
-  default. Flip to WebGL for free look, native Retina resolution,
-  widescreen, and unlocked FPS with interpolation over the 35 Hz sim.
-- **The real music.** MUS tracks drive a Nuked OPL3 chip on the audio
-  thread, register-for-register with Chocolate Doom's default OPL driver.
+### It's just a file
+
+The engine, the music synth, five CRT shaders, and the launcher all live
+in one `.html`. No server, no CDN, no SDL, no framework. Mail it, carry
+it on a USB stick, open it over `file://` on a plane. Your WAD is read
+locally and goes nowhere. Saves live in the browser, kept separate for
+each IWAD.
+
+### Compressed to the bone
+
+`gzip -9` gets DOOM and DOOM II down to 11.1 MB. DOOM.html fits both
+games *and the engine* in 6.7 MB, and the result is still an HTML file.
+
+- Engine, shaders, and every WAD share **one XZ stream**, so DOOM II
+  compresses against art DOOM already shipped.
+- The packer tries six LZMA2 tunings at `-9e` and keeps the winner.
+- **Base122** carries the binary inside HTML at ~14% overhead, instead
+  of Base64's 33%.
+- The XZ decoder itself rides along Zopfli-gzipped and unpacks through
+  the browser's built-in `DecompressionStream`. Everything decodes once
+  at startup and gets CRC-checked.
+
+### Plays like 1993 out of the box
+
+Defaults are id's defaults: 320×200, 4:3, the software renderer, 35 FPS,
+the original keys and menus.
+
+- id's gameplay code and fixed-point math run as shipped. The original
+  1.9 demos still play, and all 77 maps load and save.
+- Music runs a Nuked OPL3 chip on the audio thread and matches Chocolate
+  Doom's OPL driver register for register. That's the AdLib sound you
+  remember, not a General MIDI approximation.
+
+### Modern when you want it
+
+Everything below is opt-in, from *Extra Options* in Doom's own main
+menu. Doom's font, skull cursor, and sounds; no HTML overlay.
+
+- **WebGL renderer.** The GPU draws the level; the HUD and menus stay
+  pixel-exact.
+- **Free look.** Mouse Y tilts the camera up to ±85°. Auto-aim stays
+  vanilla. Needs WebGL.
+- **Any resolution.** 320×200 up to 1920×1200, or *Native*, which
+  follows your display pixel for pixel, Retina included.
+- **Widescreen.** *Browser* aspect widens the field of view instead of
+  stretching the picture.
+- **Unlocked FPS.** Renders at your display's refresh rate and
+  interpolates camera, monsters, lifts, and weapon bob. The simulation
+  stays at 35 Hz.
 - **Five CRT filters.** Our own Clean CRT, plus Lottes, CRT-Pi,
-  Easymode, and the full 12-pass CRT-Royale. Pick one from the menu.
-- **Settings inside Doom.** No HTML overlay. *Extra Options* lives in the
-  main menu, with Doom's font and skull cursor, and three presets:
-  Default, Emulation, and Modern.
-- **Saves that stick.** Doom's native save files persist in the browser,
-  kept apart per IWAD by SHA-256.
-- **Nothing to fetch.** No SDL, no framework, no CDN, no npm. Every byte
-  the game needs is already in the page.
+  Easymode, and the full 12-pass CRT-Royale. They work with both
+  renderers.
+- **Rebindable keys**, with a WASD preset, and an FPS counter.
+- **Presets.** *Default*, *Emulation* (stock plus Clean CRT), and
+  *Modern* (WebGL, native resolution, widescreen, free look, unlocked
+  FPS, WASD). Flip between them from one menu row.
 
 ## Quick start
 
