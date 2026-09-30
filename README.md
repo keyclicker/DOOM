@@ -2,10 +2,11 @@
 
 # DOOM.html
 
-**Doom in one HTML file. Double-click it. Play.**
+### Doom. In one HTML file. 230 KB.
 
-The original 1997 Linux Doom source, compiled to WebAssembly and packed
-into a single self-contained page. No server, no install, no internet.
+**Double-click. Drop in a WAD. Rip and tear.**
+
+No server. No install. No internet.
 
 [![License: GPL-2.0](https://img.shields.io/badge/license-GPL--2.0-blue)](LICENSE.TXT)
 ![Engine: 230 KB](https://img.shields.io/badge/engine-230_KB-brightgreen)
@@ -15,14 +16,14 @@ into a single self-contained page. No server, no install, no internet.
 
 ---
 
-`doom-engine.html` is **230 KB**. Open it from your Downloads folder, drop
-in your `DOOM.WAD`, and you're one menu away from E1M1. It works over
-`file://`, offline, from a USB stick. Your WAD is read locally and never
-uploaded anywhere.
+That's the real Linux Doom source id released in 1997, compiled to
+WebAssembly: software renderer, OPL music, saves, demos, all of it.
+The whole engine fits on a floppy disk six times over. It runs from
+`file://`, a USB stick, or a plane with no Wi-Fi, and your WAD never
+leaves your machine.
 
-Want to go further? Bake the game in. DOOM and DOOM II together are
-25.8 MB of WADs; packed into one HTML with the engine, they come out at
-**6.7 MB**.
+Want the game inside too? DOOM + DOOM II is 25.8 MB of WADs.
+Packed with the engine: **one 6.7 MB file**.
 
 ## What you get
 
