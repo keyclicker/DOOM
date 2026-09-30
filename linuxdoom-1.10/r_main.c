@@ -458,7 +458,8 @@ void R_InitPointToAngle (void)
 //
 fixed_t R_ScaleFromGlobalAngle (angle_t visangle)
 {
-    fixed_t		scale;
+    fixed_t scale;
+    fixed_t maxscale = 64 * FRACUNIT;
     int			anglea;
     int			angleb;
     int			sinea;
@@ -466,6 +467,9 @@ fixed_t R_ScaleFromGlobalAngle (angle_t visangle)
     fixed_t		num;
     int			den;
 
+#ifdef WEB
+    maxscale = (int64_t)maxscale * web_height / 200;
+#endif
     // UNUSED
 #if 0
 {
@@ -489,20 +493,24 @@ fixed_t R_ScaleFromGlobalAngle (angle_t visangle)
     // both sines are allways positive
     sinea = finesine[anglea>>ANGLETOFINESHIFT];	
     sineb = finesine[angleb>>ANGLETOFINESHIFT];
+#ifdef WEB
+    num = FixedMul(web_yprojection, sineb) << detailshift;
+#else
     num = FixedMul(projection,sineb)<<detailshift;
+#endif
     den = FixedMul(rw_distance,sinea);
 
     if (den > num>>16)
     {
 	scale = FixedDiv (num, den);
 
-	if (scale > 64*FRACUNIT)
-	    scale = 64*FRACUNIT;
+	if (scale > maxscale)
+	    scale = maxscale;
 	else if (scale < 256)
 	    scale = 256;
     }
     else
-	scale = 64*FRACUNIT;
+	scale = maxscale;
 	
     return scale;
 }
@@ -743,7 +751,11 @@ void R_ExecuteSetViewSize (void)
     {
 	dy = ((i-viewheight/2)<<FRACBITS)+FRACUNIT/2;
 	dy = abs(dy);
+#ifdef WEB
+        yslope[i] = FixedDiv(web_yprojection << detailshift, dy);
+#else
 	yslope[i] = FixedDiv ( projection<<detailshift, dy);
+#endif
     }
 	
     for (i=0 ; i<viewwidth ; i++)

@@ -311,7 +311,7 @@ try {
           .replace(/\\0.*$/, '');
         if (/^(E[1-4]M[1-9]|MAP[0-9][0-9])$/.test(name)) names.push(name);
       }
-      e._web_video(1706, 4);
+      e._web_video(1706, 800, 0);
       for (const map of names) {
         const digits = map.startsWith('MAP') ? map.slice(3) : map[1] + map[3];
         for (const char of 'idclev' + digits) key(char.charCodeAt(0));
@@ -324,7 +324,9 @@ try {
           throw Error('Warp/save did not reach ' + map);
         }
       }
-      e._web_video(320, 1);
+      e._web_video(3840, 2160, 1);
+      for (let i = 0; i < 10; i++) e._web_render(i * 6553);
+      e._web_video(320, 200, 0);
       return names.length;
     })()`);
     console.log(`PASS: rendered and saved all ${maps} maps at 1706×800`);

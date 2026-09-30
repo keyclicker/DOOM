@@ -1,4 +1,4 @@
-/** Verify settings through the browser UI and the real software renderer. */
+/** Verify settings through native menus and the real software renderer. */
 import assert from 'node:assert/strict';
 import {writeFile} from 'node:fs/promises';
 
@@ -7,7 +7,12 @@ export async function testSettings(evaluate, send) {
   const results = await evaluate(`(() => {
     const e = Doom.engine;
     const check = (condition, message) => { if (!condition) throw Error(message); };
-    const tick = (n = 1) => { for (let i = 0; i < n; i++) e._web_tick(); };
+    const tick = (n = 1) => {
+      for (let i = 0; i < n; i++) {
+        e._web_tick();
+        if (Settings.flush()) e._web_render(65536);
+      }
+    };
     const key = code => {
       e._web_key(code, 1); tick(); e._web_key(code, 0); tick();
     };
@@ -19,28 +24,28 @@ export async function testSettings(evaluate, send) {
       return result >>> 0;
     };
     key(189); key(13); tick(80);
-    Settings.open();
-    check(Settings.dialog.open && Doom.suspended, 'Settings did not pause');
-    document.querySelector('#resolution').value = '2';
-    document.querySelector('#resolution').dispatchEvent(new Event('change'));
-    document.querySelector('#close-settings').click();
-    check(Settings.value.scale === 1, 'Cancel changed active resolution');
-    Doom.suspended = true;
+    const settings = () => {
+      key(27); key(111); key(13); key(116); key(13);
+    };
+    const page = letter => { key(letter.charCodeAt(0)); key(13); };
+    check(!document.querySelector('dialog'), 'Settings still use HTML');
+    e._web_save_defaults();
+    check(/screenblocks\\s+10/.test(e.FS.readFile('/.doomrc', {encoding: 'utf8'})),
+      'Default view must fill the screen with the status bar visible');
+    settings(); page('v');
 
     const frames = [];
-    for (const scale of [1, 2, 3, 4]) {
-      Settings.open();
-      document.querySelector('#resolution').value = String(scale);
-      document.querySelector('#resolution').dispatchEvent(new Event('change'));
-      document.querySelector('#apply-settings').click();
-      Doom.suspended = true;
+    for (const scale of [1, 2, 3, 4, 5, 6]) {
+      if (scale > 1) key(174);
+      check(e._web_setting(0) === scale, 'Native resolution menu failed');
+      key(27);
       tick(3); Doom.draw();
       check(Doom.canvas.width === 320 * scale
         && Doom.canvas.height === 200 * scale, 'Resolution did not change');
       check(Doom.image.width === Doom.canvas.width, 'Stale ImageData dimensions');
       const start = performance.now();
-      for (let i = 0; i < 100; i++) { e._web_render(65536); Doom.draw(); }
-      frames.push({scale, hash: hash(), frameMs: (performance.now() - start) / 100});
+      for (let i = 0; i < 20; i++) { e._web_render(65536); Doom.draw(); }
+      frames.push({scale, hash: hash(), frameMs: (performance.now() - start) / 20});
       // A real high-resolution view contains detail inside scaled pixel blocks.
       if (scale > 1) {
         const pixels = new Uint32Array(e.HEAPU8.buffer, e._web_pixels(),
@@ -54,9 +59,11 @@ export async function testSettings(evaluate, send) {
         }
         check(detail > 20, 'Resolution only scaled the original image');
       }
+      settings(); page('v');
     }
-    Settings.value.aspect = 'browser';
-    Settings.apply(); tick(3); Doom.draw();
+    key(97); key(174);
+    check(e._web_setting(1) === 1, 'Native aspect menu failed');
+    key(27); tick(3); Doom.draw();
     check(Doom.canvas.classList.contains('browser-aspect'), 'Aspect not applied');
     const aspect = Doom.canvas.getBoundingClientRect();
     check(aspect.width === innerWidth && aspect.height === innerHeight,
@@ -79,6 +86,28 @@ export async function testSettings(evaluate, send) {
     const saveNow = e.FS.readFile('/doomsav0.dsg');
     const playerObject = new DataView(saveNow.buffer, saveNow.byteOffset)
       .getUint32(52, true);
+    // Changing the viewed player's uniform must never affect its own camera.
+    // At running speed, the interpolated camera trails more than MINZ behind.
+    const memory = new DataView(e.HEAPU8.buffer);
+    const flagsAt = playerObject + 104;
+    const originalFlags = memory.getInt32(flagsAt, true);
+    let movedFar = false;
+    e._web_key(173, 1); e._web_key(182, 1);
+    for (let step = 0; step < 16; step++) {
+      const x = memory.getInt32(playerObject + 12, true);
+      const y = memory.getInt32(playerObject + 16, true);
+      e._web_advance();
+      movedFar ||= Math.hypot(memory.getInt32(playerObject + 12, true) - x,
+        memory.getInt32(playerObject + 16, true) - y) > 4 * 65536;
+      e._web_render(0); const normal = hash();
+      memory.setInt32(flagsAt, originalFlags ^ (1 << 26), true);
+      e._web_render(0);
+      check(hash() === normal, 'Viewed player sprite leaked into the camera');
+      memory.setInt32(flagsAt, originalFlags, true);
+    }
+    e._web_key(173, 0); e._web_key(182, 0); tick();
+    check(movedFar, 'Player-sprite regression did not reach running speed');
+
     const positions = () => {
       const memory = new DataView(e.HEAPU8.buffer);
       const thinkerFunction = memory.getUint32(playerObject + 8, true);
@@ -97,6 +126,25 @@ export async function testSettings(evaluate, send) {
     const positionsBefore = positions();
     for (const part of [0, 10000, 32768, 50000, 65536]) e._web_render(part);
     check(positions() === positionsBefore, 'Rendering changed object positions');
+
+    // Native square pixels must preserve weapon artwork and scene proportions.
+    e._web_video(640, 400, 0); e._web_render(65536);
+    const crtPixels = new Uint32Array(e.HEAPU8.buffer, e._web_pixels(),
+      640 * 400).slice();
+    e._web_video(640, 480, 1); e._web_render(65536);
+    const nativePixels = new Uint32Array(e.HEAPU8.buffer, e._web_pixels(),
+      640 * 480);
+    let same = 0, compared = 0;
+    for (let y = 245; y < 333; y++) {
+      for (let x = 280; x < 360; x++) {
+        if (crtPixels[y * 640 + x]
+          === nativePixels[Math.round(y * 1.2) * 640 + x]) same++;
+        compared++;
+      }
+    }
+    check(same / compared > 0.7,
+      'Native resolution distorted the weapon: ' + same / compared);
+    Doom.image = null; Settings.video(); tick();
 
     // Both frame modes advance 35 Hz; only presentation follows display rate.
     const requestFrame = window.requestAnimationFrame;
@@ -135,7 +183,7 @@ export async function testSettings(evaluate, send) {
     const lowPixels = new Uint32Array(e.HEAPU8.buffer, e._web_pixels(),
       Doom.canvas.width * Doom.canvas.height);
     const margin = (Doom.canvas.width
-      - ((Doom.canvas.width * 288 / 320) & ~1)) / 2;
+      - Doom.canvas.width) / 2;
     for (let y = 200; y < 400; y += 11) {
       for (let x = margin + 100; x < Doom.canvas.width - margin - 100; x += 2) {
         const at = y * Doom.canvas.width + x;
@@ -145,20 +193,17 @@ export async function testSettings(evaluate, send) {
     key(191);
     for (let i = 0; i < 8; i++) key(45);
     for (let i = 0; i < 8; i++) { tick(2); key(61); }
-    key(45); key(45); tick(3);
+    key(45); tick(3);
 
     // Rebinding must affect native gameplay while leaving menu arrows intact.
-    Settings.open();
-    document.querySelector('#keyboard-tab').click();
-    document.querySelector('#bindings').querySelectorAll('button')[0].click();
-    document.dispatchEvent(new KeyboardEvent('keydown', {code: 'KeyW'}));
-    check(Settings.draft.keys[0] === 'KeyW', 'Key capture failed');
-    document.querySelector('#bindings').querySelectorAll('button')[1].click();
-    document.dispatchEvent(new KeyboardEvent('keydown', {code: 'KeyW'}));
-    check(Settings.draft.keys[1] === 'ArrowDown', 'Duplicate binding accepted');
-    document.dispatchEvent(new KeyboardEvent('keydown', {code: 'Escape'}));
-    document.querySelector('#apply-settings').click();
-    Doom.suspended = true;
+    settings(); page('k'); page('m');
+    key(102); key(13); key(119);
+    check(e._web_binding(0) === 119, 'Native key capture failed');
+    key(98); key(13); key(119);
+    check(e._web_binding(1) === 175, 'Duplicate binding accepted');
+    key(9);
+    check(e._web_binding(1) === 175, 'Reserved binding accepted');
+    key(27); key(27);
     tick(80);
     // Save the same position, then compare movement from each key after reload.
     key(188); key(13); key(13); tick(5);
@@ -175,24 +220,37 @@ export async function testSettings(evaluate, send) {
     // player_t bob/momentum is in the saved player data; viewz changes when moving.
     check(JSON.stringify(moved('KeyW')) !== JSON.stringify(moved('ArrowUp')),
       'Rebinding did not change the movement action');
-    check(JSON.parse(localStorage.getItem('doom:settings')).keys[0] === 'KeyW',
+    check(JSON.parse(localStorage.getItem('doom:settings')).keys[0] === 119,
       'Bindings not persisted');
 
-    Settings.open();
-    document.querySelector('#performance-tab').click();
-    for (const name of ['unlocked', 'fps']) {
-      const input = document.querySelector('#setting-' + name);
-      input.checked = true;
-      input.dispatchEvent(new Event('change'));
-    }
-    document.querySelector('#apply-settings').click();
-    Doom.suspended = true;
-    check(Settings.value.unlocked && !Settings.counter.hidden,
-      'Performance settings not applied');
+    settings(); page('p');
+    key(117); key(174); key(102); key(174);
+    check(Settings.value.unlocked && Settings.value.fps,
+      'Native performance settings not applied');
     Settings.frames = 0; Settings.sampleTime = 1000;
     for (let i = 1; i <= 60; i++) Settings.presented(1000 + i * 1000 / 60);
-    check(/60 FPS/.test(Settings.counter.textContent), 'FPS did not count presents');
-    Settings.open();
+    key(27);
+    e._web_render(65536); const withCounter = hash();
+    e._web_fps(99); e._web_render(65536);
+    check(hash() !== withCounter, 'FPS counter is not in the framebuffer');
+    // Keep the status bar and side gutters identical when menus close.
+    const bar = () => {
+      const width = Doom.canvas.width, height = Doom.canvas.height;
+      const bytes = e.HEAPU8.subarray(e._web_pixels()
+        + width * Math.floor(height * 168 / 200) * 4,
+        e._web_pixels() + width * height * 4);
+      // Face expressions keep animating while the single-player menu is open.
+      const first = (width - 320 * 4) / 2;
+      return [...bytes].filter((_, i) => {
+        const x = Math.floor(i / 4) % width;
+        return x < first + 143 * 4 || x >= first + 177 * 4;
+      }).join(',');
+    };
+    e._web_render(65536); const cleanBar = bar();
+    settings(); page('k'); page('m'); key(27);
+    e._web_render(65536);
+    check(bar() === cleanBar, 'Menu left pixels on the status bar');
+    settings(); page('k'); page('m'); Doom.draw();
     return {frames, rates, interpolation: [previous, between, current],
       memoryBytes: e.HEAPU8.length};
   })()`);
@@ -200,11 +258,12 @@ export async function testSettings(evaluate, send) {
     const {data} = await send('Page.captureScreenshot', {format: 'png'});
     await writeFile(process.env.DOOM_SCREENSHOTS + '-settings.png',
       Buffer.from(data, 'base64'));
-    await evaluate('Settings.close(); Doom.suspended = true; Doom.draw()');
+    await evaluate('Doom.engine._web_key(27, 1); Doom.engine._web_tick(); '
+      + 'Doom.engine._web_key(27, 0); Doom.engine._web_tick(); Doom.draw()');
     const screenshot = await send('Page.captureScreenshot', {format: 'png'});
     await writeFile(process.env.DOOM_SCREENSHOTS + '-game.png',
       Buffer.from(screenshot.data, 'base64'));
-    await evaluate('Settings.open()');
+
   }
   // A real viewport resize exercises cached projection and buffer recreation.
   await send('Emulation.setDeviceMetricsOverride', {
@@ -212,7 +271,7 @@ export async function testSettings(evaluate, send) {
   });
   await new Promise(resolve => setTimeout(resolve, 100));
   const dimensions = await evaluate(`(() => {
-    Settings.close(); Doom.suspended = true;
+    Doom.suspended = true; Settings.flush();
     for (let i = 0; i < 3; i++) Doom.engine._web_tick();
     Doom.draw();
     return [Doom.canvas.width, Doom.canvas.height];
@@ -229,6 +288,7 @@ export async function testSettings(evaluate, send) {
     });
     await new Promise(resolve => setTimeout(resolve, 100));
     const size = await evaluate(`(() => {
+      Settings.flush();
       for (let i = 0; i < 3; i++) Doom.engine._web_tick();
       Doom.draw();
       return [Doom.image.width, Doom.image.height];
@@ -241,11 +301,55 @@ export async function testSettings(evaluate, send) {
         Buffer.from(data, 'base64'));
     }
   }
+  // Native mode uses actual display pixels, including DPR changes alone.
+  await evaluate(`(() => {
+    const e = Doom.engine;
+    const key = code => {
+      e._web_key(code, 1); e._web_tick();
+      e._web_key(code, 0); e._web_tick(); Settings.flush();
+    };
+    if (e._web_state() & 16) key(27);
+    key(27); key(111); key(13); key(116); key(13); key(118); key(13);
+    key(114);
+    while (e._web_setting(0) !== 0) key(174);
+    key(27);
+  })()`);
+  for (const [width, height, dpr] of [[1280, 720, 1], [1280, 720, 2],
+    [1440, 900, 2], [1920, 1080, 2], [1024, 768, 3], [720, 1280, 2]]) {
+    await send('Emulation.setDeviceMetricsOverride', {
+      width, height, deviceScaleFactor: dpr, mobile: false,
+    });
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const size = await evaluate(`(() => {
+      Settings.flush();
+      Doom.engine._web_render(65536); Doom.draw();
+      return [Doom.canvas.width, Doom.canvas.height];
+    })()`);
+    assert.deepEqual(size, [width * dpr, height * dpr]);
+  }
+  if (process.env.DOOM_SCREENSHOTS) {
+    const {data} = await send('Page.captureScreenshot', {format: 'png'});
+    await writeFile(process.env.DOOM_SCREENSHOTS + '-retina.png',
+      Buffer.from(data, 'base64'));
+  }
+  // Classic aspect at native resolution fills the fitted 4:3 canvas.
+  const classic = await evaluate(`(() => {
+    Settings.value.aspect = 'classic'; Settings.apply();
+    Doom.engine._web_render(65536); Doom.draw();
+    return [Doom.canvas.width, Doom.canvas.height];
+  })()`);
+  assert.deepEqual(classic, [1440, 1080]);
   await send('Emulation.clearDeviceMetricsOverride');
   await evaluate(`(() => {
-    Settings.open();
-    document.querySelector('#reset-settings').click();
-    document.querySelector('#apply-settings').click();
+    const e = Doom.engine;
+    const key = code => {
+      e._web_key(code, 1); e._web_tick();
+      e._web_key(code, 0); e._web_tick(); Settings.flush();
+    };
+    // Escape closes any page left open for a screenshot, then reopen Options.
+    if (e._web_state() & 16) key(27);
+    key(27); key(111); key(13); key(116); key(13); key(114); key(13);
+    key(27);
     Doom.suspended = true;
     Doom.engine._web_tick(); Doom.draw();
     if (Settings.value.scale !== 1 || Settings.value.unlocked

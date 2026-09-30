@@ -8,11 +8,15 @@
 #include "p_local.h"
 #include "r_state.h"
 #include "v_video.h"
+#include "w_wad.h"
+#include "z_zone.h"
 #include "render.h"
 #include <emscripten.h>
 
 /* Allocate pixels only for the selected mode; the default uses screens[0]. */
-int web_width = 320, web_height = 200, web_scale = 1;
+int web_width = 320, web_height = 200;
+fixed_t web_yprojection;
+int web_square_pixels;
 int web_light_width = 320;
 int web_ui_anchor;
 byte *web_screen;
@@ -34,19 +38,20 @@ static void *resize_buffer(void *pointer, size_t size)
 }
 
 /* Apply bounded dimensions between frames, preserving all gameplay state. */
-EMSCRIPTEN_KEEPALIVE void web_video(int width, int scale)
+EMSCRIPTEN_KEEPALIVE void web_video(int width, int height, int native)
 {
-    if (scale < 1 || scale > 4 || width < 16 || width > R_MAXWIDTH)
+    if (height < 16 || height > R_MAXHEIGHT || width < 16 || width > R_MAXWIDTH
+        || (int64_t)width * height > 33554432)
         return;
-    width &= ~1;
     web_width = width;
-    web_scale = scale;
-    web_height = 200 * scale;
+    web_height = height;
+    web_square_pixels = !!native;
     web_screen = resize_buffer(web_screen, width * web_height);
     web_rgba = resize_buffer(web_rgba, width * web_height * 4);
     memset(web_screen, 0, width * web_height);
-    ui_width = width < 320 * scale ? width : 320 * scale;
-    ui_height = ui_width * 200 / 320;
+    ui_width = height * (web_square_pixels ? 4 : 8) / (web_square_pixels ? 3 : 5);
+    if (ui_width > width) ui_width = width;
+    ui_height = ui_width * (web_square_pixels ? 3 : 5) / (web_square_pixels ? 4 : 8);
     ui_x = (width - ui_width) / 2;
     ui_y = (web_height - ui_height) / 2;
     Web_BlitScreen();
@@ -67,14 +72,29 @@ void Web_SizeView(void)
 /* Scale projection by resolution, independently of browser aspect ratio. */
 fixed_t Web_Projection(void)
 {
-    return (logical_width * web_scale >> detailshift) * FRACUNIT / 2;
+    fixed_t horizontal = (int64_t)logical_width * web_height * FRACUNIT
+        / (web_square_pixels ? 480 : 400) >> detailshift;
+    web_yprojection = Web_VerticalScale(horizontal);
+    return horizontal;
+}
+
+/* Correct vertical projection once, keeping legacy fixed modes unchanged. */
+fixed_t Web_VerticalScale(fixed_t scale)
+{
+    return web_square_pixels ? (int64_t)scale * 6 / 5 : scale;
+}
+
+/* Texture stepping is the reciprocal of the corrected vertical scale. */
+fixed_t Web_VerticalInverse(fixed_t scale)
+{
+    return web_square_pixels ? (int64_t)scale * 5 / 6 : scale;
 }
 
 /* Point columns at the selected framebuffer without changing the UI buffer. */
 void Web_InitBuffer(int width, int height, byte **rows, int *columns)
 {
     int i;
-    byte *target = web_width == 320 && web_height == 200
+    byte *target = web_width == 320 && web_height == 200 && !web_square_pixels
         ? screens[0] : web_screen;
     viewwindowx = (web_width - width) / 2;
     viewwindowy = width == web_width ? 0
@@ -120,7 +140,8 @@ void Web_DrawPatch(int x, int y, patch_t *patch, int flipped)
     int col, i, width;
     column_t *post;
     byte *source;
-    if (!web_screen || (web_width == 320 && web_height == 200)) return;
+    if (!web_screen || (web_width == 320 && web_height == 200
+        && !web_square_pixels)) return;
     x -= SHORT(patch->leftoffset);
     y -= SHORT(patch->topoffset);
     width = SHORT(patch->width);
@@ -140,7 +161,8 @@ void Web_DrawPatch(int x, int y, patch_t *patch, int flipped)
 void Web_CopyPixels(int offset, int count)
 {
     int i;
-    if (!web_screen || (web_width == 320 && web_height == 200)) return;
+    if (!web_screen || (web_width == 320 && web_height == 200
+        && !web_square_pixels)) return;
     for (i = offset; i < offset + count && i < 64000; i++)
         if (i >= 0) ui_pixel(i % 320, i / 320, screens[0][i]);
 }
@@ -149,7 +171,8 @@ void Web_CopyPixels(int offset, int count)
 void Web_CopyBorder(int offset, int count)
 {
     int i, x, y, left, right, row;
-    if (!web_screen || (web_width == 320 && web_height == 200)) return;
+    if (!web_screen || (web_width == 320 && web_height == 200
+        && !web_square_pixels)) return;
     for (i = offset; i < offset + count && i < 64000; i++) {
         x = i % 320;
         y = i / 320;
@@ -163,6 +186,25 @@ void Web_CopyBorder(int offset, int count)
     }
 }
 
+/* Tile the original backdrop beside the centered status bar on wide views. */
+void Web_FillStatusSides(void)
+{
+    int x, y, first;
+    byte *flat;
+    if (!web_screen || !ui_x || logical_height == 200) return;
+    flat = W_CacheLumpName(gamemode == commercial ? "GRNROCK" : "FLOOR7_2",
+        PU_CACHE);
+    first = web_height - 32 * ui_height / 200;
+    for (y = first; y < web_height; y++) {
+        for (x = 0; x < web_width; x++) {
+            if (x >= ui_x && x < ui_x + ui_width) continue;
+            web_screen[y * web_width + x] =
+                flat[((y * 200 / web_height) & 63) * 64
+                    + ((x * (web_square_pixels ? 240 : 200) / web_height) & 63)];
+        }
+    }
+}
+
 /* Full-screen art, automap, and the original melt retain their native pixels. */
 void Web_BlitScreen(void)
 {
@@ -171,6 +213,7 @@ void Web_BlitScreen(void)
     Web_CopyPixels(0, gamestate == GS_LEVEL && logical_height != 200
         ? 168 * 320 : 64000);
     if (gamestate == GS_LEVEL && logical_height != 200) {
+        Web_FillStatusSides();
         web_ui_anchor = WEB_UI_BOTTOM;
         Web_CopyPixels(168 * 320, 32 * 320);
         web_ui_anchor = WEB_UI_CENTER;
@@ -368,7 +411,7 @@ void Web_RenderView(player_t *player)
     }
     Web_SaveView();
     /* Preserve a logical view for wipes and the original background eraser. */
-    if (web_width != 320 || web_height != 200) {
+    if (web_width != 320 || web_height != 200 || web_square_pixels) {
         for (y = 0; y < logical_height; y++)
             for (x = 0; x < logical_width; x++)
                 screens[0][(y + logical_y) * 320 + x + logical_x] =

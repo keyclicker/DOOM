@@ -58,19 +58,24 @@ The game suspends when the tab loses focus. Saves and preferences persist in
 browser local storage, separately for each IWAD's SHA-256. Clearing site data
 removes them. Reload the page to choose another WAD after quitting.
 
-## Browser settings
+## In-game settings
 
-Choose **Settings** before loading, or press **backquote (`)** during play.
-The overlay pauses gameplay and releases the mouse. Apply saves changes;
-Cancel leaves the active settings untouched. Click the game to recapture the
-mouse after closing. Restore defaults returns every browser setting to the
-original behavior.
+Open **Options → Settings** in Doom's menu. Video, Performance, and Keyboard
+pages use the game's font, skull cursor, sounds, and keyboard navigation.
+Use arrows to select or change an option, Enter to open a page or capture a
+binding, Backspace to go back, and Escape to close. Changes apply immediately.
+The default view fills the screen while keeping the status bar visible.
 
 - **Video:** actual software rendering at 320×200, 640×400, 960×600, or
-  1280×800. Original 4:3 remains the default. Match browser adapts the render
+  1280×800, 1600×1000, or 1920×1200. **Native** follows the displayed canvas's
+  size multiplied by `devicePixelRatio`, including Retina screens and changes
+  in browser zoom or display density. Native buffers use square pixels;
+  fixed modes retain Doom's original pixel correction.
+  Original 4:3 remains the default. Browser aspect adapts the render
   width to the window, expanding the horizontal field of view on wide
-  displays. HUD/menu artwork stays proportional. Width is bounded to
-  4096 pixels; the selected resolution determines height.
+  displays. HUD/menu artwork stays proportional, with the original backdrop
+  tiled beside the status bar. Buffers are bounded to 8192 pixels per side
+  and 32 Mi pixels total; larger displays scale down proportionally.
 - **Performance:** optional rendering at the display refresh rate, with
   interpolated camera, objects, moving floors/ceilings, and weapon motion.
   Simulation remains 35 Hz. Disabling it restores the original 35 FPS.
@@ -78,10 +83,10 @@ original behavior.
 - **Keyboard:** edit movement, turning, strafing, fire, use, and run bindings.
   Original and WASD presets are available. Duplicate assignments are rejected;
   left/right modifiers share one action. Menu/function keys, weapon numbers,
-  automap, and pause retain their original shortcuts. Mouse controls remain
+  automap, view-size controls, and pause retain their original shortcuts. Mouse controls remain
   unchanged.
 
-Browser settings persist across WADs in local storage. Native saves remain
+These settings persist across WADs in local storage. Native saves remain
 compatible. Automap, menu art, intermissions, and melt transitions retain their
 original pixel detail. Software limits still apply; hardware rendering and
 free look remain separate future work.
@@ -93,8 +98,9 @@ free look remain separate future work.
 - `app.js` loads the WAD into Emscripten's memory filesystem, schedules the
   original 35 Hz simulation, presents the selected framebuffer, and
   persists Doom's native save files. A long frame catches up at most 250 ms.
-- `settings.js` manages the tabbed overlay, validated local preferences,
-  native action bindings, viewport resizing, and the presentation counter.
+- `m_menu.c` owns the native settings pages, action capture, and FPS text.
+- `settings.js` validates and persists preferences, applies viewport changes
+  between engine calls, and counts presented frames. There is no HTML menu.
 - `render.c` separates the world framebuffer from the 320×200 UI. It caches
   projection tables per video/view change, mirrors UI writes without losing
   patch transparency, and keeps interpolation snapshots outside serialized
@@ -102,8 +108,9 @@ free look remain separate future work.
 - `r_*.c` use bounded larger work arrays, 16-bit visplane row coordinates,
   variable column stride, and resolution-independent lighting. Low-detail
   routines draw pixel pairs without mutating the caller's column index or
-  overrunning spans. The default
-  view retains the previous build's exact tested framebuffer hashes.
+  overrunning spans. Native-resolution rendering separates horizontal and
+  vertical projection and widens raster edges before clipping. The viewed
+  player's sprite is excluded even when interpolation trails its position.
 - `audio.js` caches decoded 8-bit PCM samples and lets Web Audio mix them.
   Doom still chooses sounds, volume, stereo position, and pitch. Both volume
   sliders use the engine's 0–15 scale; music volume goes to the OPL driver,
@@ -154,10 +161,10 @@ Representative builds with Emscripten 6.0.9:
 
 | File | Raw | Gzip |
 | --- | ---: | ---: |
-| `index.html` | 94 KB | 28 KB |
-| `doom.wasm` | 300 KB | 141 KB |
+| `index.html` | 85 KB | 25 KB |
+| `doom.wasm` | 304 KB | 143 KB |
 | `music.wasm` | 26 KB | 10 KB |
-| Total | 421 KB | 178 KB |
+| Total | 415 KB | 177 KB |
 
 The build prints exact raw and gzip sizes; compressed sizes require HTTP
 compression by the hosting server. Music adds about 11 KB compressed,
@@ -171,15 +178,15 @@ Music synthesis measured 54 ms of CPU per audio second, roughly 5% of one
 core, with 1 MiB of separate WASM memory. The audio callback allocates no
 buffers. These are local measurements, not a claim about all devices.
 
-WASM memory starts at 32 MiB and can grow to 128 MiB. The tested games remained
+WASM memory starts at 32 MiB and can grow to 512 MiB. The tested games remained
 at 32 MiB with default settings. Switching through higher resolutions and
 widescreen modes grows memory as needed. Canvas views are reused until the
 resolution or WASM memory changes; sample buffers are
 decoded once. GPU usage is limited to whatever the browser uses to display
 Canvas 2D; there is no hardware level renderer.
 
-At 1280×800, sampled scenes took about 4 ms per software frame plus Canvas
-submission on the same VM, versus 0.3 ms at 320×200. These measurements exclude
+At 1280×800, sampled scenes took about 7–8 ms per software frame plus Canvas
+submission on the same VM, versus 0.3–0.7 ms at 320×200. These measurements exclude
 browser compositing and display latency. Higher resolution and unlocked FPS
 multiply CPU work; both are opt-in.
 
@@ -199,9 +206,12 @@ while the chord is held, combined modifier releases, independent left/right
 Control keys, and ordinary Command shortcuts. Ammo counts verify one round
 per short tap and the original continuous fire while Control remains held.
 
-`test-settings.mjs` also exercises the real overlay, cancellation, defaults,
-key capture/conflicts, native rebinding, all four resolutions, portrait and
-ultrawide resizing, and interpolation without changing live object positions.
+`test-settings.mjs` also exercises the native menu hierarchy, defaults,
+key capture/conflicts, rebinding, six fixed resolutions, portrait/ultrawide
+resizing, and native mode at 1×/2×/3× pixel density. Regressions check that
+running never exposes the player's own sprite, menus leave no status-bar
+residue, square-pixel projection preserves weapon artwork, and interpolation
+leaves live object positions intact.
 A simulated 100 Hz display verifies the same game-tic count in capped and
 unlocked modes, while only unlocked presentation reaches 100 Hz. All 77 maps
 are exercised at 1706×800. Set `DOOM_SCREENSHOTS=/tmp/doom-check` to write UI

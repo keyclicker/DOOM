@@ -28,7 +28,7 @@ def main():
         '-sEXPORT_NAME=createDoom', '-sFILESYSTEM=1',
         '-sEXPORTED_RUNTIME_METHODS=FS,HEAPU8',
         '-sALLOW_MEMORY_GROWTH=1', '-sINITIAL_MEMORY=33554432',
-        '-sMAXIMUM_MEMORY=134217728', '-sSTACK_SIZE=1048576',
+        '-sMAXIMUM_MEMORY=536870912', '-sSTACK_SIZE=1048576',
         '-sMALLOC=emmalloc', '-sASSERTIONS=0', '-sINVOKE_RUN=0',
         '-o', str(OUT / 'doom.js'),
     ]

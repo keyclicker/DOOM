@@ -62,6 +62,10 @@ rcsid[] = "$Id: m_menu.c,v 1.7 1997/02/03 22:45:10 b1 Exp $";
 #include "sounds.h"
 
 #include "m_menu.h"
+#ifdef WEB
+#include "settings.h"
+#include "render.h"
+#endif
 
 
 
@@ -213,6 +217,9 @@ void M_DrawReadThis2(void);
 void M_DrawNewGame(void);
 void M_DrawEpisode(void);
 void M_DrawOptions(void);
+#ifdef WEB
+static void M_WebSettings(int choice);
+#endif
 void M_DrawSound(void);
 void M_DrawLoad(void);
 void M_DrawSave(void);
@@ -346,6 +353,9 @@ enum
     mousesens,
     option_empty2,
     soundvol,
+#ifdef WEB
+    websettings,
+#endif
     opt_end
 } options_e;
 
@@ -358,7 +368,10 @@ menuitem_t OptionsMenu[]=
     {-1,"",0},
     {2,"M_MSENS",	M_ChangeSensitivity,'m'},
     {-1,"",0},
-    {1,"M_SVOL",	M_Sound,'s'}
+    {1,"M_SVOL",	M_Sound,'s'},
+#ifdef WEB
+    {1,"", M_WebSettings,'t'}
+#endif
 };
 
 menu_t  OptionsDef =
@@ -950,6 +963,9 @@ char	msgNames[2][9]		= {"M_MSGOFF","M_MSGON"};
 
 void M_DrawOptions(void)
 {
+#ifdef WEB
+    M_WriteText(60, OptionsDef.y + LINEHEIGHT * websettings, "SETTINGS");
+#endif
     V_DrawPatchDirect (108,15,0,W_CacheLumpName("M_OPTTTL",PU_CACHE));
 	
     V_DrawPatchDirect (OptionsDef.x + 175,OptionsDef.y+LINEHEIGHT*detail,0,
@@ -1345,6 +1361,267 @@ M_WriteText
 
 
 
+
+#ifdef WEB
+/* Native settings share Doom's menu navigation, font, cursor, and sounds. */
+static void M_WebPage(int choice);
+static void M_WebDraw(void);
+static void M_WebVideo(int choice);
+static void M_WebPerformance(int choice);
+static void M_WebPreset(int choice);
+static void M_WebBind(int choice);
+static void M_WebReset(int choice);
+
+static menuitem_t WebSettingsItems[] = {
+    {1, "", M_WebPage, 'v'},
+    {1, "", M_WebPage, 'p'},
+    {1, "", M_WebPage, 'k'},
+    {1, "", M_WebReset, 'r'}
+};
+static menu_t WebSettingsMenu = {
+    4, &OptionsDef, WebSettingsItems, M_WebDraw, 54, 64, 0
+};
+static menuitem_t WebVideoItems[] = {
+    {2, "", M_WebVideo, 'r'}, {2, "", M_WebVideo, 'a'}
+};
+static menu_t WebVideoMenu = {
+    2, &WebSettingsMenu, WebVideoItems, M_WebDraw, 54, 64, 0
+};
+static menuitem_t WebPerformanceItems[] = {
+    {2, "", M_WebPerformance, 'u'}, {2, "", M_WebPerformance, 'f'}
+};
+static menu_t WebPerformanceMenu = {
+    2, &WebSettingsMenu, WebPerformanceItems, M_WebDraw, 54, 64, 0
+};
+static menuitem_t WebKeyboardItems[] = {
+    {1, "", M_WebPage, 'm'}, {1, "", M_WebPage, 'a'},
+    {2, "", M_WebPreset, 'p'}
+};
+static menu_t WebKeyboardMenu = {
+    3, &WebSettingsMenu, WebKeyboardItems, M_WebDraw, 54, 64, 0
+};
+static menuitem_t WebMovementItems[] = {
+    {1, "", M_WebBind, 'f'}, {1, "", M_WebBind, 'b'},
+    {1, "", M_WebBind, 'l'}, {1, "", M_WebBind, 'r'},
+    {1, "", M_WebBind, 's'}, {1, "", M_WebBind, 's'}
+};
+static menu_t WebMovementMenu = {
+    6, &WebKeyboardMenu, WebMovementItems, M_WebDraw, 54, 64, 0
+};
+static menuitem_t WebActionItems[] = {
+    {1, "", M_WebBind, 'f'}, {1, "", M_WebBind, 'u'},
+    {1, "", M_WebBind, 's'}, {1, "", M_WebBind, 'r'}
+};
+static menu_t WebActionMenu = {
+    4, &WebKeyboardMenu, WebActionItems, M_WebDraw, 54, 64, 0
+};
+
+/* Match g_game.c defaults; preset changes never alter menu navigation. */
+static int web_presets[2][10] = {
+    {KEY_UPARROW, KEY_DOWNARROW, KEY_LEFTARROW, KEY_RIGHTARROW,
+     ',', '.', KEY_RCTRL, ' ', KEY_RALT, KEY_RSHIFT},
+    {'w', 's', KEY_LEFTARROW, KEY_RIGHTARROW,
+     'a', 'd', KEY_RCTRL, 'e', KEY_RALT, KEY_RSHIFT}
+};
+static int web_capture = -1;
+static char *web_binding_hint = "ENTER: CHANGE KEY";
+
+/* Derive the preset label from bindings, including individually edited keys. */
+static int M_WebPresetIndex(void)
+{
+    int preset, action;
+    for (preset = 0; preset < 2; preset++) {
+        for (action = 0; action < 10; action++)
+            if (*Web_Binding(action) != web_presets[preset][action]) break;
+        if (action == 10) return preset;
+    }
+    return 2;
+}
+
+/* Show engine key names without introducing font or browser dependencies. */
+static char *M_WebKeyName(int key)
+{
+    static char name[2];
+    switch (key) {
+    case KEY_UPARROW: return "UP";
+    case KEY_DOWNARROW: return "DOWN";
+    case KEY_LEFTARROW: return "LEFT";
+    case KEY_RIGHTARROW: return "RIGHT";
+    case KEY_RCTRL: return "CTRL";
+    case KEY_RALT: return "ALT";
+    case KEY_RSHIFT: return "SHIFT";
+    case KEY_ENTER: return "ENTER";
+    case KEY_BACKSPACE: return "BACKSPACE";
+    case ' ': return "SPACE";
+    default: name[0] = toupper(key); name[1] = 0; return name;
+    }
+}
+
+/* Keep paired labels and values inside the original 320-pixel menu area. */
+static void M_WebRow(int row, char *label, char *value)
+{
+    int y = 64 + row * LINEHEIGHT;
+    M_WriteText(54, y, label);
+    if (value) M_WriteText(300 - M_StringWidth(value), y, value);
+}
+
+/* Draw the selected settings page using IWAD artwork and the HUD font. */
+static void M_WebDraw(void)
+{
+    static char *root[] = {"VIDEO", "PERFORMANCE", "KEYBOARD",
+        "RESTORE DEFAULTS"};
+    static char *actions[] = {"FORWARD", "BACKWARD", "TURN LEFT",
+        "TURN RIGHT", "STRAFE LEFT", "STRAFE RIGHT", "FIRE", "USE / OPEN",
+        "STRAFE MODIFIER", "RUN"};
+    static char *resolutions[] = {"NATIVE", "320X200", "640X400", "960X600",
+        "1280X800", "1600X1000", "1920X1200"};
+    static char *presets[] = {"ORIGINAL", "WASD", "CUSTOM"};
+    char dimensions[32];
+    char *title = "SETTINGS";
+    char *hint = "BACKSPACE: BACK";
+    int i, first;
+
+    V_DrawPatchDirect(108, 15, 0, W_CacheLumpName("M_OPTTTL", PU_CACHE));
+    if (currentMenu == &WebSettingsMenu) {
+        for (i = 0; i < 4; i++) M_WebRow(i, root[i], NULL);
+    } else if (currentMenu == &WebVideoMenu) {
+        title = "VIDEO";
+        M_WebRow(0, "RESOLUTION", resolutions[web_resolution]);
+        M_WebRow(1, "ASPECT RATIO", web_aspect ? "BROWSER" : "4:3");
+        sprintf(dimensions, "%d X %d", web_width, web_height);
+        M_WriteText((320 - M_StringWidth(dimensions)) / 2, 128, dimensions);
+        hint = "LEFT / RIGHT: CHANGE";
+    } else if (currentMenu == &WebPerformanceMenu) {
+        title = "PERFORMANCE";
+        M_WebRow(0, "UNLOCK FPS", web_unlocked ? "ON" : "OFF");
+        M_WebRow(1, "FPS COUNTER", web_show_fps ? "ON" : "OFF");
+        hint = "LEFT / RIGHT: CHANGE";
+    } else if (currentMenu == &WebKeyboardMenu) {
+        title = "KEYBOARD";
+        M_WebRow(0, "MOVEMENT", NULL);
+        M_WebRow(1, "ACTIONS", NULL);
+        M_WebRow(2, "PRESET", presets[M_WebPresetIndex()]);
+    } else {
+        first = currentMenu == &WebMovementMenu ? 0 : 6;
+        title = first ? "ACTIONS" : "MOVEMENT";
+        for (i = 0; i < currentMenu->numitems; i++)
+            M_WebRow(i, actions[first + i], web_capture == first + i
+                ? "?" : M_WebKeyName(*Web_Binding(first + i)));
+        hint = web_binding_hint;
+    }
+    M_WriteText((320 - M_StringWidth(title)) / 2, 38, title);
+    M_WriteText((320 - M_StringWidth(hint)) / 2, 160, hint);
+}
+
+/* Enter settings from Options, preserving each page's last selected row. */
+static void M_WebSettings(int choice)
+{
+    M_SetupNextMenu(&WebSettingsMenu);
+}
+
+/* Follow the two-level category hierarchy without a separate UI framework. */
+static void M_WebPage(int choice)
+{
+    if (currentMenu == &WebSettingsMenu)
+        M_SetupNextMenu(choice == 0 ? &WebVideoMenu
+            : choice == 1 ? &WebPerformanceMenu : &WebKeyboardMenu);
+    else {
+        web_binding_hint = "ENTER: CHANGE KEY";
+        M_SetupNextMenu(choice == 0 ? &WebMovementMenu : &WebActionMenu);
+    }
+}
+
+/* Notify JavaScript; buffer resizing occurs only after the engine returns. */
+static void M_WebVideo(int choice)
+{
+    if (itemOn == 0)
+        web_resolution = (web_resolution + (choice ? 1 : 6)) % 7;
+    else web_aspect = !web_aspect;
+    Web_SettingsChanged();
+}
+
+/* Presentation changes leave the simulation fixed at 35 ticks per second. */
+static void M_WebPerformance(int choice)
+{
+    if (itemOn == 0) web_unlocked = !web_unlocked;
+    else web_show_fps = !web_show_fps;
+    R_SetViewSize(screenblocks, detailLevel);
+    Web_SettingsChanged();
+}
+
+/* Cycle the two presets; either direction leaves custom bindings predictably. */
+static void M_WebPreset(int choice)
+{
+    int i, preset = M_WebPresetIndex();
+    preset = preset == 2 ? (choice ? 0 : 1) : !preset;
+    for (i = 0; i < 10; i++) *Web_Binding(i) = web_presets[preset][i];
+    Web_SettingsChanged();
+}
+
+/* Capture one action while normal menu navigation is temporarily suspended. */
+static void M_WebBind(int choice)
+{
+    web_capture = choice + (currentMenu == &WebActionMenu ? 6 : 0);
+    web_binding_hint = "PRESS KEY. ESC: CANCEL";
+}
+
+/* Preserve menu, automap, pause, and weapon shortcuts when rebinding actions. */
+static boolean M_WebCapture(event_t *ev)
+{
+    int i, key = ev->data1;
+    if (ev->type != ev_keydown) return ev->type != ev_keyup;
+    if (key == KEY_ESCAPE) {
+        web_capture = -1;
+        web_binding_hint = "ENTER: CHANGE KEY";
+        return true;
+    }
+    if (!((key >= 32 && key <= 126) || key == KEY_ENTER
+        || key == KEY_BACKSPACE || key == KEY_UPARROW || key == KEY_DOWNARROW
+        || key == KEY_LEFTARROW || key == KEY_RIGHTARROW
+        || key == KEY_RCTRL || key == KEY_RALT || key == KEY_RSHIFT)
+        || (key >= '1' && key <= '7') || key == '-' || key == '=') {
+        web_binding_hint = "RESERVED KEY. TRY ANOTHER";
+        return true;
+    }
+    for (i = 0; i < 10; i++) {
+        if (i != web_capture && *Web_Binding(i) == key) {
+            web_binding_hint = "KEY IN USE. TRY ANOTHER";
+            return true;
+        }
+    }
+    *Web_Binding(web_capture) = key;
+    web_capture = -1;
+    web_binding_hint = "ENTER: CHANGE KEY";
+    S_StartSound(NULL, sfx_pistol);
+    Web_SettingsChanged();
+    return true;
+}
+
+/* Restore classic presentation and bindings with the full status-bar view. */
+static void M_WebReset(int choice)
+{
+    int i;
+    web_resolution = 1;
+    web_aspect = web_unlocked = web_show_fps = 0;
+    for (i = 0; i < 10; i++) *Web_Binding(i) = web_presets[0][i];
+    screenblocks = 10;
+    screenSize = 7;
+    R_SetViewSize(screenblocks, detailLevel);
+    Web_SettingsChanged();
+}
+
+/* Render the counter with the game's own font, inside the framebuffer. */
+void Web_DrawFPS(void)
+{
+    char text[24];
+    if (!web_show_fps) return;
+    sprintf(text, "%d FPS", web_fps_value);
+    web_ui_anchor = WEB_UI_TOP;
+    M_WriteText(318 - M_StringWidth(text), 2, text);
+    web_ui_anchor = WEB_UI_CENTER;
+}
+#endif
+
 //
 // CONTROL PANEL
 //
@@ -1364,6 +1641,9 @@ boolean M_Responder (event_t* ev)
     static  int     lastx = 0;
 	
     ch = -1;
+#ifdef WEB
+    if (web_capture >= 0) return M_WebCapture(ev);
+#endif
 	
     if (ev->type == ev_joystick && joywait < I_GetTime())
     {

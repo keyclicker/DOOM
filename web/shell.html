@@ -19,93 +19,11 @@ button { font: inherit; color: inherit; background: #181818;
   border: 1px solid #555; padding: 12px 20px; cursor: pointer; }
 #message { max-width: 50ch; text-align: center; white-space: pre-wrap; }
 canvas.browser-aspect { width: 100vw; height: 100vh; }
-button:hover, select:hover { border-color: #aaa; }
-button:focus-visible, select:focus-visible { outline: 2px solid #ee674d;
-  outline-offset: 3px; }
-#open-settings { padding: 8px 14px; color: #aaa; }
-#fps { position: fixed; top: 10px; right: 12px; padding: 4px 8px;
-  background: #000b; color: #eee; pointer-events: none; }
-dialog { width: min(580px, calc(100vw - 24px)); max-height: calc(100vh - 24px);
-  margin: auto; padding: 24px; border: 1px solid #555; color: #ddd;
-  background: #151515; overflow: auto; }
-dialog::backdrop { background: #000b; }
-dialog header { display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 20px; }
-h1 { margin: 0; font-size: 22px; }
-#close-settings { padding: 4px 10px; }
-[role=tablist] { display: flex; gap: 8px; border-bottom: 1px solid #444;
-  margin-bottom: 24px; padding-bottom: 12px; }
-[role=tab] { padding: 8px 12px; }
-[aria-selected=true] { color: #ff8068; border-color: #ff8068; }
-[role=tabpanel] { min-height: 210px; }
-.setting { display: flex; align-items: center; justify-content: space-between;
-  gap: 20px; margin: 20px 0; }
-select { font: inherit; color: inherit; background: #222;
-  border: 1px solid #666; padding: 8px; max-width: 65%; }
-input[type=checkbox] { width: 20px; height: 20px; accent-color: #d54d35; }
-p { font-size: 13px; line-height: 1.5; color: #aaa; }
-#bindings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px;
-  align-items: center; }
-#bindings button { padding: 8px; }
-#binding-message { color: #ffb09e; min-height: 2.8em; }
-dialog footer { display: flex; justify-content: space-between; gap: 16px;
-  margin-top: 24px; }
-#apply-settings { border-color: #ff8068; }
-@media (max-width: 420px) {
-  dialog { padding: 16px; }
-  [role=tablist] { gap: 4px; }
-  [role=tab] { padding: 8px; font-size: 14px; }
-}
 </style>
 <canvas id="screen" width="320" height="200"></canvas>
 <div id="load"><button id="choose">Load WAD</button>
 <input id="file" type="file" accept=".wad" hidden>
-<span id="message">Or drop a WAD here</span>
-<button id="open-settings">Settings · &#96;</button></div>
-<output id="fps" aria-label="Frames per second" hidden></output>
-<dialog id="settings" aria-labelledby="settings-title">
-<header><h1 id="settings-title">Settings</h1>
-<button id="close-settings" aria-label="Cancel settings">×</button></header>
-<div role="tablist" aria-label="Settings categories">
-<button id="video-tab" role="tab" aria-selected="true"
-  aria-controls="video-settings">Video</button>
-<button id="performance-tab" role="tab" aria-selected="false" tabindex="-1"
-  aria-controls="performance-settings">Performance</button>
-<button id="keyboard-tab" role="tab" aria-selected="false" tabindex="-1"
-  aria-controls="keyboard-settings">Keyboard</button>
-</div>
-<section id="video-settings" role="tabpanel" aria-labelledby="video-tab">
-<label class="setting">Resolution<select id="resolution">
-<option value="1">320 × 200 · Original</option>
-<option value="2">640 × 400</option><option value="3">960 × 600</option>
-<option value="4">1280 × 800</option></select></label>
-<label class="setting">Aspect ratio<select id="aspect">
-<option value="classic">4:3 · Original</option>
-<option value="browser">Match browser</option></select></label>
-<p>Higher resolution adds detail to the world. Original artwork stays pixelated.
-With “Match browser”, the width adapts to your window and shows more of the world
-on wide screens.</p>
-</section>
-<section id="performance-settings" role="tabpanel"
-  aria-labelledby="performance-tab" hidden>
-<label class="setting">Unlock FPS<input id="setting-unlocked" type="checkbox"></label>
-<p>Smooth movement at your display’s refresh rate. Game speed stays unchanged.
-Off keeps the original 35 FPS.</p>
-<label class="setting">FPS counter<input id="setting-fps" type="checkbox"></label>
-<p>Higher resolutions and frame rates use more CPU.</p>
-</section>
-<section id="keyboard-settings" role="tabpanel" aria-labelledby="keyboard-tab" hidden>
-<label class="setting">Preset<select id="key-preset">
-<option value="classic">Original</option><option value="wasd">WASD</option>
-<option value="custom">Custom</option></select></label>
-<div id="bindings"></div><p id="binding-message" role="status"></p>
-<p>Click a binding, then press a key. Left and right modifiers share a binding.
-Escape opens Doom’s menu; Tab opens the map; 1–7 select weapons.
-Press &#96; during play to open these settings.</p>
-</section>
-<footer><button id="reset-settings">Restore defaults</button>
-<button id="apply-settings">Apply</button></footer>
-</dialog>
+<span id="message">Or drop a WAD here</span></div>
 <script>
 /* ENGINE_CODE */
 /* BROWSER_CODE */

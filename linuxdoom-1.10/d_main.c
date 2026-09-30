@@ -75,6 +75,7 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 #include "r_local.h"
 #ifdef WEB
 #include "render.h"
+#include "settings.h"
 #endif
 
 
@@ -232,7 +233,13 @@ void D_Display (void)
 	wipe = false;
 
     if (gamestate == GS_LEVEL && gametic)
-	HU_Erase();
+    {
+#ifdef WEB
+        if (web_show_fps && scaledviewwidth != 320)
+            R_VideoErase(0, 320 * 10);
+#endif
+        HU_Erase();
+    }
     
     // do buffered drawing
     switch (gamestate)
@@ -248,8 +255,10 @@ void D_Display (void)
 	    redrawsbar = true;              // just put away the help screen
 #ifdef WEB
         {
+            Web_FillStatusSides();
             web_ui_anchor = WEB_UI_BOTTOM;
-            ST_Drawer(viewheight == 200, redrawsbar);
+            ST_Drawer(viewheight == 200,
+                redrawsbar || menuactive || menuactivestate);
             web_ui_anchor = WEB_UI_CENTER;
         }
 #else
@@ -336,6 +345,9 @@ void D_Display (void)
     }
 
 
+#ifdef WEB
+    Web_DrawFPS();
+#endif
     // menus go directly to the screen
     M_Drawer ();          // menu is drawn even on top of everything
     NetUpdate ();         // send out any new accumulation
