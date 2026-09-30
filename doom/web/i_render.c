@@ -1,6 +1,7 @@
 /* WebGL transport; geometry and materials belong to r_*. GPL-2.0-only */
 #include "i_render.h"
 #include "r_state.h"
+#include "v_view.h"
 #include <emscripten.h>
 
 /* WebGL consumes views of WASM memory, never JSON or per-vertex JS objects. */
@@ -36,6 +37,14 @@ EM_JS(void, web_capture, (byte *pixels), {
 
 /* COLORMAP is immutable and shared by all GPU materials. */
 EMSCRIPTEN_KEEPALIVE byte *web_colormaps(void) { return colormaps; }
+
+/* Transfer logical artwork and layout without expanding screen-sized pixels. */
+EMSCRIPTEN_KEEPALIVE uint32_t *web_overlay(void) { return v_overlay[0]; }
+EMSCRIPTEN_KEEPALIVE v_overlay_layout_t *web_overlay_layout(void)
+{
+    return &v_overlay_layout;
+}
+EMSCRIPTEN_KEEPALIVE byte *web_backdrop(void) { return V_BackgroundFlat(); }
 
 /* Keep imported JavaScript functions private to the platform translation unit. */
 void I_RenderTexture(int id, int width, int height, const byte *pixels)

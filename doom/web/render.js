@@ -27,9 +27,15 @@ class DoomRenderer {
     this.mapBytes = engine.HEAPU8.slice(maps, maps + 8704);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 34, gl.RED,
       gl.UNSIGNED_BYTE, engine.HEAPU8.subarray(maps, maps + 8704));
-    this.overlay = this.texture2D(4, gl.RGBA8, 1, 1, gl.RGBA);
+    this.overlay = this.texture2D(4, gl.R32UI, 320, 800,
+      gl.RED_INTEGER, gl.UNSIGNED_INT);
     this.color = this.texture2D(5, gl.RGBA8, 1, 1, gl.RGBA);
     this.background = this.texture2D(7, gl.RGBA8, 1, 1, gl.RGBA);
+    this.backdrop = this.texture2D(8, gl.R8, 64, 64, gl.RED);
+    const flat = engine._web_backdrop();
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 64, gl.RED,
+      gl.UNSIGNED_BYTE, engine.HEAPU8.subarray(flat, flat + 4096));
+    this.software = this.texture2D(9, gl.RGBA8, 1, 1, gl.RGBA);
     this.framebuffer = gl.createFramebuffer();
     this.depth = gl.createRenderbuffer();
     this.vertices = gl.createBuffer();
@@ -136,19 +142,59 @@ class DoomRenderer {
         uv = vec2(p.x, 1.0 - p.y);
         gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
       }`, `
-      uniform sampler2D overlay;
+      uniform highp usampler2D overlay;
+      uniform sampler2D software;
+      uniform sampler2D palette;
+      uniform sampler2D backdrop;
+      uniform bool world;
+      uniform ivec2 screen;
+      uniform ivec4 art;
+      uniform ivec2 sides;
       in vec2 uv;
       out vec4 color;
+      // Match the engine's floor-rounded destination rectangle boundaries.
+      ivec2 sourcePixel(ivec2 p, ivec2 source, ivec2 target) {
+        return ((p + 1) * source - 1) / target;
+      }
+      uint layer(int index, ivec2 p, ivec2 size) {
+        if (any(lessThan(p, ivec2(0))) || any(greaterThanEqual(p, size)))
+          return 0u;
+        ivec2 at = sourcePixel(p, ivec2(320, 200), size);
+        return texelFetch(overlay, at + ivec2(0, index * 200), 0).r;
+      }
       void main() {
-        color = texture(overlay, uv);
-        if (color.a < 0.5) discard;
+        if (!world) {
+          color = texture(software, uv);
+          return;
+        }
+        ivec2 p = ivec2(gl_FragCoord.x, float(screen.y) - gl_FragCoord.y);
+        uint pixel = layer(0, p - art.xy, art.zw);
+        pixel = max(pixel, layer(1, p - ivec2(art.x, screen.y - art.w),
+          art.zw));
+        pixel = max(pixel, layer(2, p - ivec2(art.x, 0), art.zw));
+        int status = screen.y - 32 * art.w / 200;
+        ivec2 border = sourcePixel(p, ivec2(320, 168),
+          ivec2(screen.x, status));
+        if (border.y < 200)
+          pixel = max(pixel, texelFetch(overlay,
+            border + ivec2(0, 600), 0).r);
+        if (pixel != 0u) {
+          color = texelFetch(palette, ivec2(int(pixel & 255u), 0), 0);
+        } else if (sides.x != 0 && p.y >= status
+          && (p.x < art.x || p.x >= art.x + art.z)) {
+          ivec2 at = p * ivec2(sides.y != 0 ? 240 : 200, 200) / screen.y;
+          int index = int(texelFetch(backdrop, at & 63, 0).r * 255.0 + 0.5);
+          color = texelFetch(palette, ivec2(index, 0), 0);
+        } else discard;
       }`);
     gl.useProgram(this.scene);
     for (const [name, unit] of [['atlas', 0], ['rects', 1], ['palette', 2],
       ['colormap', 3], ['background', 7]])
       gl.uniform1i(this.uniform(this.scene, name), unit);
     gl.useProgram(this.ui);
-    gl.uniform1i(this.uniform(this.ui, 'overlay'), 4);
+    for (const [name, unit] of [['overlay', 4], ['palette', 2],
+      ['backdrop', 8], ['software', 9]])
+      gl.uniform1i(this.uniform(this.ui, name), unit);
     // Loss is recoverable: the game switches to software on the next frame.
     canvas.addEventListener('webglcontextlost', event => {
       event.preventDefault();
@@ -248,10 +294,8 @@ class DoomRenderer {
       gl.RENDERBUFFER, this.depth);
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE)
       throw new Error('WebGL framebuffer unavailable');
-    gl.activeTexture(gl.TEXTURE4);
-    gl.bindTexture(gl.TEXTURE_2D, this.overlay);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0,
-      gl.RGBA, gl.UNSIGNED_BYTE, null);
+    // Full-screen software frames are needed only for automap/art/transitions.
+    this.softwareWidth = 0;
     // Allocate the scene copy only if fuzz is actually visible.
     this.backgroundWidth = 0;
     this.presented = false;
@@ -280,7 +324,8 @@ class DoomRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
     gl.disable(gl.SCISSOR_TEST);
     gl.depthMask(true);
-    gl.clearColor(0, 0, 0, 1);
+    const clear = this.paletteBytes;
+    gl.clearColor(clear[0] / 255, clear[1] / 255, clear[2] / 255, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     const [x, y, z, yaw, pitch, fx, fy, vx, vy, vw, vh, fixed, time, sky] = camera;
     gl.viewport(vx, this.height - vy - vh, vw, vh);
@@ -351,11 +396,31 @@ class DoomRenderer {
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
     gl.bindVertexArray(null);
-    gl.activeTexture(gl.TEXTURE4);
-    gl.bindTexture(gl.TEXTURE_2D, this.overlay);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.width, this.height,
-      gl.RGBA, gl.UNSIGNED_BYTE, bytes);
     gl.useProgram(this.ui);
+    gl.uniform1i(this.uniform(this.ui, 'world'), !!world);
+    if (world) {
+      this.updatePalette();
+      const e = this.engine;
+      const layout = new Int32Array(e.HEAPU8.buffer, e._web_overlay_layout(), 6);
+      gl.uniform2i(this.uniform(this.ui, 'screen'), this.width, this.height);
+      gl.uniform4iv(this.uniform(this.ui, 'art'), layout.subarray(0, 4));
+      gl.uniform2iv(this.uniform(this.ui, 'sides'), layout.subarray(4));
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, this.overlay);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 320, 800,
+        gl.RED_INTEGER, gl.UNSIGNED_INT,
+        new Uint32Array(e.HEAPU8.buffer, e._web_overlay(), 320 * 800));
+    } else {
+      gl.activeTexture(gl.TEXTURE9);
+      gl.bindTexture(gl.TEXTURE_2D, this.software);
+      if (this.softwareWidth !== this.width) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.width, this.height, 0,
+          gl.RGBA, gl.UNSIGNED_BYTE, null);
+        this.softwareWidth = this.width;
+      }
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.width, this.height,
+        gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+    }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.framebuffer);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
