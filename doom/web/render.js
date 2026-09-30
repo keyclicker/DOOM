@@ -36,20 +36,23 @@ class DoomRenderer {
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 64, gl.RED,
       gl.UNSIGNED_BYTE, engine.HEAPU8.subarray(flat, flat + 4096));
     this.software = this.texture2D(9, gl.RGBA8, 1, 1, gl.RGBA);
+    this.occlusionDepth = this.texture2D(10, gl.DEPTH_COMPONENT24, 1, 1,
+      gl.DEPTH_COMPONENT, gl.UNSIGNED_INT);
+    this.occlusionBuffer = gl.createFramebuffer();
     this.framebuffer = gl.createFramebuffer();
     this.depth = gl.createRenderbuffer();
     this.vertices = gl.createBuffer();
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertices);
-    for (const [index, size, offset] of [[0, 3, 0], [1, 2, 12], [2, 2, 20]]) {
+    for (const [index, size, offset] of [[0, 3, 0], [1, 2, 12], [2, 3, 20]]) {
       gl.enableVertexAttribArray(index);
-      gl.vertexAttribPointer(index, size, gl.FLOAT, false, 28, offset);
+      gl.vertexAttribPointer(index, size, gl.FLOAT, false, 32, offset);
     }
-    this.scene = this.program(`
+    const vertex = `
       layout(location=0) in vec3 position;
       layout(location=1) in vec2 uv;
-      layout(location=2) in vec2 surface;
+      layout(location=2) in vec3 surface;
       uniform vec3 eye;
       uniform vec4 direction;
       uniform vec4 projection;
@@ -58,10 +61,16 @@ class DoomRenderer {
       out float distance;
       flat out int material;
       flat out float light;
+      #ifdef SPRITE
+      flat out float floorHeight;
+      #endif
       void main() {
         texcoord = uv;
         material = int(surface.x);
         light = surface.y;
+        #ifdef SPRITE
+        floorHeight = surface.z;
+        #endif
         if (weapon) {
           gl_Position = vec4(position.x * 2.0 / projection.z - 1.0,
             1.0 - position.y * 2.0 / projection.w, 0.0, 1.0);
@@ -77,7 +86,8 @@ class DoomRenderer {
             depth * 1.00000763 - 1.00000381, depth);
           distance = max(forward, 1.0);
         }
-      }`, `
+      }`;
+    const fragment = `
       uniform sampler2D atlas;
       uniform sampler2D rects;
       uniform sampler2D palette;
@@ -94,6 +104,12 @@ class DoomRenderer {
       in float distance;
       flat in int material;
       flat in float light;
+      #ifdef SPRITE
+      uniform vec3 eye;
+      uniform float subpixel;
+      uniform highp sampler2D occlusion;
+      flat in float floorHeight;
+      #endif
       out vec4 color;
       void main() {
         vec4 rect = texelFetch(rects, ivec2(material, 0), 0);
@@ -115,6 +131,23 @@ class DoomRenderer {
         ivec2 at = ivec2(rect.xy + mod(floor(uv), rect.zw));
         vec2 texel = texelFetch(atlas, at, 0).rg;
         if (texel.g < 0.5) discard;
+        #ifdef SPRITE
+        gl_FragDepth = gl_FragCoord.z;
+        float rayZ = direction.w + direction.z
+          * (gl_FragCoord.y - origin.y - projection.w * 0.5) / projection.y;
+        if (eye.z > floorHeight && rayZ < 0.0) {
+          // Match the floor despite raster subpixel and D24 rounding.
+          float depth = (floorHeight - eye.z) / rayZ;
+          float floorDepth = 1.000003815 - 0.500001905 / depth;
+          // Never expose a hidden actor's feet at a solid wall or closed door.
+          if (gl_FragCoord.z > floorDepth && gl_FragCoord.z
+            > texelFetch(occlusion, ivec2(gl_FragCoord.xy), 0).r) discard;
+          float slope = abs(0.500001905 * direction.z
+            / (projection.y * (floorHeight - eye.z)));
+          float bias = slope * subpixel + 2.0 / 16777216.0;
+          gl_FragDepth = min(gl_FragDepth, floorDepth - bias);
+        }
+        #endif
         int index = int(texel.r * 255.0 + 0.5);
         int shade = int(clamp((15.0 - clamp(light, 0.0, 15.0)) * 4.0
           - min(48.0, 2560.0 / distance) * 0.5, 0.0, 31.0));
@@ -134,7 +167,12 @@ class DoomRenderer {
         color = texelFetch(palette, ivec2(index, 0), 0);
         if (cap != 0.0)
           color.rgb = mix(color.rgb, cap < 0.0 ? skyTop : skyBottom, abs(cap));
-      }`);
+      }`;
+    this.scene = this.program(vertex, fragment);
+    // Keep explicit fragment depth out of the world's early-depth-test path.
+    this.sprites = this.program('#define SPRITE\n' + vertex,
+      '#define SPRITE\n' + fragment);
+    this.occlusion = this.program(vertex, 'void main() {}');
     this.ui = this.program(`
       out vec2 uv;
       void main() {
@@ -187,10 +225,15 @@ class DoomRenderer {
           color = texelFetch(palette, ivec2(index, 0), 0);
         } else discard;
       }`);
-    gl.useProgram(this.scene);
-    for (const [name, unit] of [['atlas', 0], ['rects', 1], ['palette', 2],
-      ['colormap', 3], ['background', 7]])
-      gl.uniform1i(this.uniform(this.scene, name), unit);
+    for (const program of [this.scene, this.sprites]) {
+      gl.useProgram(program);
+      for (const [name, unit] of [['atlas', 0], ['rects', 1], ['palette', 2],
+        ['colormap', 3], ['background', 7]])
+        gl.uniform1i(this.uniform(program, name), unit);
+    }
+    gl.uniform1f(this.uniform(this.sprites, 'subpixel'),
+      2 ** -gl.getParameter(gl.SUBPIXEL_BITS));
+    gl.uniform1i(this.uniform(this.sprites, 'occlusion'), 10);
     gl.useProgram(this.ui);
     for (const [name, unit] of [['overlay', 4], ['palette', 2],
       ['backdrop', 8], ['software', 9]])
@@ -281,6 +324,17 @@ class DoomRenderer {
     if (this.width === width && this.height === height) return;
     this.width = width;
     this.height = height;
+    gl.activeTexture(gl.TEXTURE10);
+    gl.bindTexture(gl.TEXTURE_2D, this.occlusionDepth);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, width, height, 0,
+      gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.occlusionBuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT,
+      gl.TEXTURE_2D, this.occlusionDepth, 0);
+    gl.drawBuffers([gl.NONE]);
+    gl.readBuffer(gl.NONE);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE)
+      throw new Error('WebGL sprite occlusion buffer unavailable');
     gl.activeTexture(gl.TEXTURE5);
     gl.bindTexture(gl.TEXTURE_2D, this.color);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0,
@@ -315,8 +369,26 @@ class DoomRenderer {
       gl.RGBA, gl.UNSIGNED_BYTE, bytes);
   }
 
-  /** Stream one reusable triangle buffer; world and weapon need two draws. */
-  world(vertices, count, shadows, weapons, camera) {
+  /** Share camera/lighting state between world and floor-aware sprite shaders. */
+  useScene(program, camera) {
+    const gl = this.gl;
+    const [x, y, z, yaw, pitch, fx, fy, vx, vy, vw, vh, fixed, time] = camera;
+    const uniform = name => this.uniform(program, name);
+    gl.useProgram(program);
+    gl.uniform3f(uniform('eye'), x, y, z);
+    gl.uniform4f(uniform('direction'), Math.cos(yaw), Math.sin(yaw),
+      Math.cos(pitch), Math.sin(pitch));
+    gl.uniform4f(uniform('projection'), fx, fy, vw, vh);
+    gl.uniform2f(uniform('origin'), vx, this.height - vy - vh);
+    gl.uniform1i(uniform('fixedmap'), fixed);
+    gl.uniform1f(uniform('time'), time);
+    gl.uniform3fv(uniform('skyTop'), this.skyColors[0]);
+    gl.uniform3fv(uniform('skyBottom'), this.skyColors[1]);
+    gl.uniform1i(uniform('weapon'), 0);
+  }
+
+  /** Stream one triangle buffer, with separate world, sprite and weapon draws. */
+  world(vertices, count, occluders, sprites, shadows, weapons, camera) {
     if (this.lost) return;
     this.resize();
     this.updatePalette();
@@ -327,7 +399,7 @@ class DoomRenderer {
     const clear = this.paletteBytes;
     gl.clearColor(clear[0] / 255, clear[1] / 255, clear[2] / 255, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    const [x, y, z, yaw, pitch, fx, fy, vx, vy, vw, vh, fixed, time, sky] = camera;
+    const [, , , , pitch, , , vx, vy, vw, vh, fixed, , sky] = camera;
     gl.viewport(vx, this.height - vy - vh, vw, vh);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
@@ -339,15 +411,6 @@ class DoomRenderer {
       gl.bufferData(gl.ARRAY_BUFFER, this.bufferBytes, gl.DYNAMIC_DRAW);
     }
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
-    gl.useProgram(this.scene);
-    const uniform = name => this.uniform(this.scene, name);
-    gl.uniform3f(uniform('eye'), x, y, z);
-    gl.uniform4f(uniform('direction'), Math.cos(yaw), Math.sin(yaw),
-      Math.cos(pitch), Math.sin(pitch));
-    gl.uniform4f(uniform('projection'), fx, fy, vw, vh);
-    gl.uniform2f(uniform('origin'), vx, this.height - vy - vh);
-    gl.uniform1i(uniform('fixedmap'), fixed);
-    gl.uniform1f(uniform('time'), time);
     if (this.sky !== sky || this.skyMap !== fixed
       || this.skyPalette !== this.paletteVersion) {
       this.sky = sky;
@@ -363,11 +426,18 @@ class DoomRenderer {
         return color.map(value => value / (edge.length / 2 * 255));
       });
     }
-    gl.uniform3fv(uniform('skyTop'), this.skyColors[0]);
-    gl.uniform3fv(uniform('skyBottom'), this.skyColors[1]);
-    gl.uniform1i(uniform('weapon'), 0);
+    // Solid-wall silhouettes also cover artwork projected below the floor.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.occlusionBuffer);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    this.useScene(this.occlusion, camera);
+    gl.drawArrays(gl.TRIANGLES, count, occluders);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    this.useScene(this.scene, camera);
     gl.drawArrays(gl.TRIANGLES, 0, count);
-    if (shadows || (weapons && vertices[(count + shadows) * 7 + 6] === -2)) {
+    this.useScene(this.sprites, camera);
+    gl.drawArrays(gl.TRIANGLES, count + occluders, sprites);
+    const opaque = count + occluders + sprites;
+    if (shadows || (weapons && vertices[(opaque + shadows) * 8 + 6] === -2)) {
       gl.activeTexture(gl.TEXTURE7);
       gl.bindTexture(gl.TEXTURE_2D, this.background);
       if (this.backgroundWidth !== this.width) {
@@ -376,12 +446,13 @@ class DoomRenderer {
         this.backgroundWidth = this.width;
       }
       gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, this.width, this.height);
-      gl.drawArrays(gl.TRIANGLES, count, shadows);
+      gl.drawArrays(gl.TRIANGLES, opaque, shadows);
     }
     gl.disable(gl.DEPTH_TEST);
-    gl.uniform1i(uniform('weapon'), 1);
-    gl.drawArrays(gl.TRIANGLES, count + shadows, weapons);
-    this.triangles = (count + shadows + weapons) / 3;
+    gl.useProgram(this.scene);
+    gl.uniform1i(this.uniform(this.scene, 'weapon'), 1);
+    gl.drawArrays(gl.TRIANGLES, opaque + shadows, weapons);
+    this.triangles = (opaque + shadows + weapons) / 3;
     this.pitch = pitch;
     this.lastCamera = Array.from(camera);
   }

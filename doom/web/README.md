@@ -122,6 +122,11 @@ You can select WebGL again to retry after context loss.
   Materials are uploaded once per context as palette indices plus coverage.
   Frustum rejection works at arbitrary pitch; BSP ordering reduces overdraw.
   A visibility-only pass retains the original automap discovery rules.
+  Sprites carry their interpolated sector floor height. Their shader tests
+  below-floor artwork at that floor's depth, preserving the original artwork
+  position instead of lifting actors. A depth-only solid-wall silhouette pass
+  keeps hidden feet behind walls and closed doors. Higher floors still occlude
+  sprites; weapons and ordinary world depth testing are unchanged.
 - `web/i_render.c` implements `i_render.h`; `render.js` submits triangles
   directly to WebGL 2. Indexed texture and COLORMAP lookups retain the WAD's
   palette, gamma, damage flashes and power-up colors. The native status bar,
@@ -194,10 +199,10 @@ Representative builds with Emscripten 6.0.9:
 
 | File | Raw | Gzip |
 | --- | ---: | ---: |
-| `index.html` | 109 KB | 32 KB |
+| `index.html` | 113 KB | 32 KB |
 | `doom.wasm` | 319 KB | 150 KB |
 | `music.wasm` | 26 KB | 10 KB |
-| Total | 454 KB | 191 KB |
+| Total | 458 KB | 192 KB |
 
 The build prints exact raw and gzip sizes; compressed sizes require HTTP
 compression by the hosting server. Music adds about 11 KB compressed,
@@ -218,7 +223,9 @@ resolution or WASM memory changes; sample buffers are
 decoded once. Software startup creates no WebGL context. Enabling WebGL
 allocates a bounded RG8 material atlas (up to 32 MiB), a reusable vertex
 buffer, color/depth targets at the selected resolution, and a fixed 1,024,000-byte
-artwork texture. A screen-sized RGBA upload is needed only for software frames
+artwork texture. Sprite occlusion uses one additional depth target at the selected
+resolution, written and sampled entirely on the GPU. A screen-sized RGBA upload
+is needed only for software frames
 (automap, full-screen art, and wipes). Materials and buffers are reused across
 frames and renderer toggles. The GPU handles the level geometry and artwork
 scaling; the engine still runs gameplay and logical UI drawing.
@@ -279,6 +286,12 @@ Original demos also run through WebGL to
 exercise moving sectors, combat and transitions. Chromium's explicit
 SwiftShader flag is for testing only; the shipped page uses the browser's
 normal WebGL device selection.
+
+`test-sprites.mjs` checks sprite floor-height interpolation without simulation
+changes, and compares visible artwork pixels with/without a supporting floor.
+It covers different floor heights, pitch, solid-wall silhouettes, higher-floor
+occlusion, airborne sprites and spectre fuzz. The old world shader is a negative
+control that reproduces the original floor clipping.
 
 Tests start a game through its menus, move, fire, use the automap, pause,
 save/load, reload the page and restore saves, then warp to and save every map.

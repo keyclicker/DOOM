@@ -17,11 +17,13 @@ EM_JS(void, web_texture, (int id, int width, int height, const byte *pixels), {
 });
 
 EM_JS(void, web_world_geometry, (const render_vertex_t *vertices, int count,
-    int shadows, int weapons, const render_camera_t *camera), {
+    int occluders, int sprites, int shadows, int weapons,
+    const render_camera_t *camera), {
     if (Doom.graphics.failed || Doom.graphics.lost) return;
     try {
         Doom.graphics.world(new Float32Array(HEAPU8.buffer,
-            vertices, (count + shadows + weapons) * 7), count, shadows, weapons,
+            vertices, (count + occluders + sprites + shadows + weapons) * 8),
+            count, occluders, sprites, shadows, weapons,
             new Float32Array(HEAPU8.buffer, camera, 14));
     } catch (error) {
         console.warn('Using software rendering:', error);
@@ -53,10 +55,11 @@ void I_RenderTexture(int id, int width, int height, const byte *pixels)
 }
 
 /* Pass the contiguous batch and camera packet without copying WASM memory. */
-void I_RenderWorld(const render_vertex_t *vertices, int count, int shadows,
-    int weapons, const render_camera_t *camera)
+void I_RenderWorld(const render_vertex_t *vertices, int count, int occluders,
+    int sprites, int shadows, int weapons, const render_camera_t *camera)
 {
-    web_world_geometry(vertices, count, shadows, weapons, camera);
+    web_world_geometry(vertices, count, occluders, sprites, shadows, weapons,
+        camera);
 }
 
 /* Preserve the native wipe input on a geometry-rendered frame. */
