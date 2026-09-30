@@ -303,7 +303,7 @@ static void quad(float x1, float y1, float x2, float y2, float bottom,
 }
 
 /* Emit only front-facing wall tiers, with Doom's pegging and row offsets. */
-static void wall(seg_t *seg)
+static void wall(seg_t *seg, int solid_walls)
 {
     sector_t *front = seg->frontsector, *back = seg->backsector;
     side_t *side = seg->sidedef;
@@ -315,6 +315,13 @@ static void wall(seg_t *seg)
     int flags = seg->linedef->flags, texture, tier;
     if ((x2 - x1) * (camera.y - y1) - (y2 - y1) * (camera.x - x1) > 0)
         return;
+    if (solid_walls) {
+        /* Closed boundaries hide the whole sprite, including buried artwork. */
+        if (!back || back->ceilingheight <= front->floorheight
+            || back->floorheight >= front->ceilingheight)
+            quad(x1, y1, x2, y2, -32768, 32768, 0, 0, 0, 0, 0, 0);
+        return;
+    }
     u = units(seg->offset) + units(side->textureoffset);
     end = u + length2(x2 - x1, y2 - y1);
     light = (front->lightlevel >> 4) + extralight;
@@ -397,7 +404,7 @@ static void plane(int index, int ceiling)
 }
 
 /* Traverse front to back to let depth rejection reduce GPU overdraw. */
-static void world(int index)
+static void world(int index, int solid_walls)
 {
     int i, side;
     node_t *node;
@@ -406,19 +413,22 @@ static void world(int index)
         i = index == -1 ? 0 : index & ~NF_SUBSECTOR;
         sub = &subsectors[i];
         if (polygons[i].count && !visible(polygons[i].x, polygons[i].y,
-            sub->sector->floorpic == skyflatnum ? -32768
+            solid_walls || sub->sector->floorpic == skyflatnum ? -32768
                 : units(sub->sector->floorheight),
-            sub->sector->ceilingpic == skyflatnum ? 32768
+            solid_walls || sub->sector->ceilingpic == skyflatnum ? 32768
                 : units(sub->sector->ceilingheight), polygons[i].radius)) return;
-        plane(i, 0);
-        plane(i, 1);
-        for (i = 0; i < sub->numlines; i++) wall(&segs[sub->firstline + i]);
+        if (!solid_walls) {
+            plane(i, 0);
+            plane(i, 1);
+        }
+        for (i = 0; i < sub->numlines; i++)
+            wall(&segs[sub->firstline + i], solid_walls);
         return;
     }
     node = &nodes[index];
     side = R_PointOnSide(viewx, viewy, node);
-    world(node->children[side]);
-    world(node->children[side ^ 1]);
+    world(node->children[side], solid_walls);
+    world(node->children[side ^ 1], solid_walls);
 }
 
 /* Upright billboards preserve sprite rotations while the camera can pitch. */
@@ -426,7 +436,7 @@ static void sprite(mobj_t *thing)
 {
     spriteframe_t *frame;
     material_t *mat;
-    int rotation = 0, lump, flip;
+    int rotation = 0, lump, flip, first;
     float left, right, top, x, y, light, sine, cosine;
     if (thing == viewplayer->mo) return;
     frame = &sprites[thing->sprite].spriteframes[thing->frame & FF_FRAMEMASK];
@@ -448,10 +458,14 @@ static void sprite(mobj_t *thing)
     light = thing->frame & FF_FULLBRIGHT ? 256
         : (thing->subsector->sector->lightlevel >> 4) + extralight;
     if (thing->flags & MF_SHADOW) light = -2;
+    first = vertex_count;
     quad(x + sine * left, y - cosine * left,
         x + sine * right, y - cosine * right, top - mat->height, top,
         flip ? mat->width : 0, flip ? 0 : mat->width, 0, mat->height,
         mat->id, light);
+    /* Use the interpolated plane, not the simulation's cached floorz. */
+    for (; first < vertex_count; first++)
+        vertices[first].floor = units(thing->subsector->sector->floorheight);
 }
 
 /* Use the same psprite offsets and projection, independent of camera pitch. */
@@ -496,7 +510,7 @@ static void weapons(player_t *player)
 /* Submit geometry while the interpolation wrapper owns the render snapshot. */
 void R_RenderGeometry(player_t *player)
 {
-    int count, shadows;
+    int count, occluders, sprite_count, shadows;
     thinker_t *thinker;
     R_SetupFrame(player);
     prepare();
@@ -523,22 +537,25 @@ void R_RenderGeometry(player_t *player)
     side_x = length2(1, tan_x);
     side_y = length2(1, tan_y);
     vertex_count = 0;
-    world(numnodes - 1);
+    world(numnodes - 1, 0);
+    count = vertex_count;
+    world(numnodes - 1, 1);
+    occluders = vertex_count - count;
     for (thinker = thinkercap.next; thinker != &thinkercap;
          thinker = thinker->next)
         if (thinker->function.acp1 == (actionf_p1)P_MobjThinker
             && !(((mobj_t *)thinker)->flags & MF_SHADOW))
             sprite((mobj_t *)thinker);
-    count = vertex_count;
+    sprite_count = vertex_count - count - occluders;
     for (thinker = thinkercap.next; thinker != &thinkercap;
          thinker = thinker->next)
         if (thinker->function.acp1 == (actionf_p1)P_MobjThinker
             && (((mobj_t *)thinker)->flags & MF_SHADOW))
             sprite((mobj_t *)thinker);
-    shadows = vertex_count - count;
+    shadows = vertex_count - count - occluders - sprite_count;
     weapons(player);
-    I_RenderWorld(vertices, count, shadows,
-        vertex_count - count - shadows, &camera);
+    I_RenderWorld(vertices, count, occluders, sprite_count, shadows,
+        vertex_count - count - occluders - sprite_count - shadows, &camera);
     /* Keep automap discovery's original occlusion rules; no software pixels. */
     r_mapping = 1;
     R_ClearClipSegs();

@@ -3,9 +3,9 @@
 #define I_RENDER_H
 #include "doomtype.h"
 
-/* Triangles use Doom world coordinates, pixel UVs, material IDs and light. */
+/* World coordinates, pixel UVs, material/light, and the sprite's floor plane. */
 typedef struct {
-    float x, y, z, u, v, material, light;
+    float x, y, z, u, v, material, light, floor;
 } render_vertex_t;
 
 /* Float-only camera packet keeps the host ABI independent of engine structs. */
@@ -18,9 +18,9 @@ typedef struct {
 
 /* Copy an indexed/coverage texture into the backend's material cache. */
 void I_RenderTexture(int id, int width, int height, const byte *pixels);
-/* Submit a perspective world batch and a screen-aligned weapon batch. */
-void I_RenderWorld(const render_vertex_t *vertices, int count, int shadows,
-    int weapons, const render_camera_t *camera);
+/* Submit world, solid-wall silhouettes, sprites, shadows, then weapons. */
+void I_RenderWorld(const render_vertex_t *vertices, int count, int occluders,
+    int sprites, int shadows, int weapons, const render_camera_t *camera);
 /* Capture the last presented frame only when a classic melt needs it. */
 void I_RenderCapture(byte *pixels);
 #endif
