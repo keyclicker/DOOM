@@ -851,24 +851,54 @@ void M_MusicVol(int choice)
 
 
 
+/* Copy opaque column runs, leaving a glyph's excluded rows transparent.
+ * A NULL destination measures the encoded size before allocating the patch.
+ */
+static int M_CopyMenuColumn(byte *dest, const byte *post, int top, int bottom)
+{
+    int size = 0, y, end, stop, count;
+
+    while (post[0] != 255) {
+        end = post[0] + post[1];
+        for (y = post[0]; y < end; y = stop) {
+            if (y >= top && y < bottom) {
+                stop = bottom;
+                continue;
+            }
+            stop = y < top && top < end ? top : end;
+            count = stop - y;
+            if (dest) {
+                dest[size] = y;
+                dest[size + 1] = count;
+                dest[size + 2] = dest[size + count + 3] = 0;
+                memcpy(dest + size + 3, post + 3 + y - post[0], count);
+            }
+            size += count + 4;
+        }
+        post += post[1] + 4;
+    }
+    if (dest) dest[size] = 255;
+    return size + 1;
+}
+
 /* Assemble "Extra" from the loaded IWAD's original menu lettering.
  * These glyph rectangles match Doom and Doom II; no game art is bundled.
- * Preserve column posts so the result uses the normal patch renderer.
+ * Exclude neighboring letter shadows from the E, t, and a edge columns.
  */
 static patch_t *M_ExtraOptionsPatch(void)
 {
     static patch_t *extra;
     static const struct {
         char *lump;
-        int first, width;
+        int first, width, trim_column, trim_top, trim_bottom;
     } letters[] = {
-        {"M_ENDGAM", 0, 16},     /* E */
-        {"M_SFXVOL", 28, 16},    /* x */
-        {"M_OPTION", 30, 11},    /* t */
-        {"M_SCRNSZ", 28, 15},    /* r */
-        {"M_SAVEG", 16, 14}      /* a */
+        {"M_ENDGAM", 0, 16, 15, 5, 10},     /* E */
+        {"M_SFXVOL", 28, 16, -1, 0, 0},    /* x */
+        {"M_OPTION", 30, 11, 0, 7, 9},    /* t */
+        {"M_SCRNSZ", 28, 15, -1, 0, 0},    /* r */
+        {"M_SAVEG", 16, 14, 13, 3, 4}      /* a */
     };
-    const byte *post, *start;
+    const byte *post;
     int sizes[72], i, x, column = 0, size = 8 + 72 * 4;
     patch_t *source;
     byte *data;
@@ -879,9 +909,9 @@ static patch_t *M_ExtraOptionsPatch(void)
         for (x = 0; x < letters[i].width; x++, column++) {
             post = (byte *)source
                 + LONG(source->columnofs[letters[i].first + x]);
-            start = post;
-            while (post[0] != 255) post += post[1] + 4;
-            sizes[column] = post - start + 1;
+            sizes[column] = M_CopyMenuColumn(NULL, post,
+                x == letters[i].trim_column ? letters[i].trim_top : 0,
+                x == letters[i].trim_column ? letters[i].trim_bottom : 0);
             size += sizes[column];
         }
     }
@@ -897,7 +927,9 @@ static patch_t *M_ExtraOptionsPatch(void)
             post = (byte *)source
                 + LONG(source->columnofs[letters[i].first + x]);
             extra->columnofs[column] = LONG(data - (byte *)extra);
-            memcpy(data, post, sizes[column]);
+            M_CopyMenuColumn(data, post,
+                x == letters[i].trim_column ? letters[i].trim_top : 0,
+                x == letters[i].trim_column ? letters[i].trim_bottom : 0);
             data += sizes[column];
         }
     }

@@ -65,8 +65,19 @@ export async function testMenu(evaluate, send) {
         }
       }
     };
+    const backdrop = new Uint32Array(e.HEAPU8.buffer,
+      e._web_pixels(), 64000).slice();
     key(27);
     const mainY = commercial ? 72 : 64;
+    // Neighboring shadows must reveal the world, not be painted black.
+    const extraPixels = new Uint32Array(e.HEAPU8.buffer,
+      e._web_pixels(), 64000);
+    for (const [x, y] of [[15, 5], [15, 6], [15, 7], [15, 8], [15, 9],
+      [32, 7], [32, 8], [71, 3]]) {
+      const at = (mainY + 32 + y) * 320 + 97 + x;
+      check(extraPixels[at] === backdrop[at],
+        'Extra Options contains a neighboring glyph pixel');
+    }
     patchMatches('M_DOOM', 94, 2);
     patchMatches('M_NGAME', 97, mainY);
     patchMatches('M_OPTION', 97, mainY + 16);
