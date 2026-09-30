@@ -1412,7 +1412,8 @@ static menu_t SettingsMenu = {
 static menuitem_t SettingsVideoItems[] = {
     {2, "", M_SettingsVideo, 'r'}, {2, "", M_SettingsVideo, 'a'},
 #ifdef HARDWARE_RENDER
-    {2, "", M_SettingsVideo, 'e'}, {2, "", M_SettingsVideo, 'f'}
+    {2, "", M_SettingsVideo, 'e'}, {2, "", M_SettingsVideo, 'f'},
+    {2, "", M_SettingsVideo, 'c'}
 #endif
 };
 static menu_t SettingsVideoMenu = {
@@ -1522,7 +1523,13 @@ static void M_SettingsDraw(void)
     static char *resolutions[] = {"NATIVE", "320X200", "640X400", "960X600",
         "1280X800", "1600X1000", "1920X1200"};
     static char *presets[] = {"ORIGINAL", "WASD", "CUSTOM"};
-    static char *video[] = {"RESOLUTION", "ASPECT RATIO", "RENDERER", "FREE LOOK"};
+    static char *video[] = {"RESOLUTION", "ASPECT RATIO", "RENDERER",
+        "FREE LOOK", "CRT FILTER"};
+    static char *crt[] = {"OFF", "CLEAN CRT", "LOTTES", "CRT-PI",
+        "EASYMODE", "ROYALE"};
+    static char *crt_help[] = {"ORIGINAL PIXELS", "GENTLE BLENDING",
+        "RGB ARCADE MONITOR", "LIGHTWEIGHT SCANLINES",
+        "FLAT APERTURE GRILLE", "DETAILED TUBE - HIGH GPU COST"};
     static char *performance[] = {"UNLOCK FPS", "FPS COUNTER"};
     static char *keyboard[] = {"MOVEMENT", "ACTIONS", "PRESET"};
     char dimensions[32];
@@ -1543,12 +1550,16 @@ static void M_SettingsDraw(void)
         M_SettingsRow(2, video[2], m_renderer ? "WEBGL" : "SOFTWARE");
         M_SettingsRow(3, video[3], !m_renderer ? "N/A"
             : m_freelook ? "ON" : "OFF");
+        M_SettingsRow(4, video[4], crt[m_crt]);
 #endif
         sprintf(dimensions, "%d X %d", vid_width, vid_height);
         M_WriteText((320 - M_StringWidth(dimensions)) / 2, 136, dimensions);
-        if (m_gpu_failed) {
+        if (m_gpu_failed || m_crt_failed) {
             strcpy(dimensions, "WEBGL UNAVAILABLE");
             M_WriteText((320 - M_StringWidth(dimensions)) / 2, 146, dimensions);
+        } else {
+            char *description = crt_help[m_crt];
+            M_WriteText((320 - M_StringWidth(description)) / 2, 146, description);
         }
         hint = "LEFT/RIGHT: CHANGE  ESC: BACK";
     } else if (currentMenu == &SettingsPerformanceMenu) {
@@ -1603,7 +1614,8 @@ static void M_SettingsVideo(int choice)
     else if (itemOn == 2) {
         m_renderer = !m_renderer;
         if (!m_renderer) m_freelook = 0;
-    } else if (m_renderer) m_freelook = !m_freelook;
+    } else if (itemOn == 3 && m_renderer) m_freelook = !m_freelook;
+    else if (itemOn == 4) m_crt = (m_crt + (choice ? 1 : 5)) % 6;
     I_SettingsChanged();
 }
 
@@ -1671,6 +1683,7 @@ static void M_SettingsReset(int choice)
     m_resolution = 1;
     m_aspect = m_unlocked = m_show_fps = 0;
     m_renderer = m_freelook = m_gpu_failed = 0;
+    m_crt = m_crt_failed = 0;
     for (i = 0; i < 10; i++) *M_Binding(i) = settings_presets[0][i];
     screenblocks = 10;
     screenSize = 7;

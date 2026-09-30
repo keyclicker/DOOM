@@ -27,6 +27,7 @@ doom/
   i_*.h               platform service interfaces
   linux/              legacy X11/Unix i_* implementations (not ready)
   web/                browser i_* implementations, JS, HTML, integration tests
+  shaders/<name>/     each display filter's GLSL, includes, presets and textures
   vendor/             unmodified OPL emulator and license
   Makefile            shared source list and compilation rules
   build/<platform>/   ignored outputs and dependency files

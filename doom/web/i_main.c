@@ -35,6 +35,7 @@ EMSCRIPTEN_KEEPALIVE int web_setting(int index)
     case 3: return m_show_fps;
     case 4: return m_renderer;
     case 5: return m_freelook;
+    case 6: return m_crt;
     default: return 0;
     }
 }
@@ -49,6 +50,13 @@ EMSCRIPTEN_KEEPALIVE void web_renderer(int enabled, int look, int failed)
     r_pitch = 0;
     R_ResetInterpolation();
     R_SetViewSize(screenblocks, detailLevel);
+}
+
+/* Display filtering is host-owned and does not reset camera interpolation. */
+EMSCRIPTEN_KEEPALIVE void web_crt(int mode, int failed)
+{
+    m_crt = mode >= 0 && mode < 6 ? mode : 0;
+    m_crt_failed = !!failed;
 }
 
 /* Material IDs belong to the current graphics context, not the level. */
