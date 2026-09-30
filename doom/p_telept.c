@@ -27,9 +27,7 @@ rcsid[] = "$Id: p_telept.c,v 1.3 1997/01/28 22:08:29 b1 Exp $";
 
 
 #include "doomdef.h"
-#ifdef VARIABLE_VIDEO
 #include "r_interp.h"
-#endif
 
 #include "s_sound.h"
 
@@ -126,9 +124,7 @@ EV_Teleport
 
 		thing->angle = m->angle;
 		thing->momx = thing->momy = thing->momz = 0;
-#ifdef VARIABLE_VIDEO
                 R_SnapObject(thing);
-#endif
 		return 1;
 	    }	
 	}

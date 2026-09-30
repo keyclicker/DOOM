@@ -48,7 +48,7 @@ upstream revisions. Builds require no network access.
 
 ## WebGL adaptation
 
-`web/pack_shaders.py` preprocesses each stage with `cpp`, using upstream static
+`tools/pack_shaders.py` preprocesses each stage with `cpp`, using upstream static
 settings. It changes the legacy GLSL interface to GLSL ES 3.00, restores constant
 global initializers, makes numeric conversions explicit, and expresses a
 uniform-derived global as a macro. The blur conversion's assignment-in-condition

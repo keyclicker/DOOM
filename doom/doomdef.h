@@ -34,15 +34,9 @@ enum { VERSION =  110 };
 
 
 // Bound software-renderer storage independently of the 320x200 UI.
-#ifdef VARIABLE_VIDEO
 #define R_MAXWIDTH 8192
 #define R_MAXHEIGHT 8192
 #define PLANE_UNSET 0xffff
-#else
-#define R_MAXWIDTH SCREENWIDTH
-#define R_MAXHEIGHT SCREENHEIGHT
-#define PLANE_UNSET 0xff
-#endif
 
 // Game mode handling - identify IWAD version
 //  to handle IWAD dependend animations etc.
@@ -84,23 +78,6 @@ typedef enum
 // If rangecheck is undefined,
 // most parameter validation debugging code will not be compiled
 #define RANGECHECK
-
-// Do or do not use external soundserver.
-// The sndserver binary to be run separately
-//  has been introduced by Dave Taylor.
-// The integrated sound support is experimental,
-//  and unfinished. Default is synchronous.
-// Experimental asynchronous timer based is
-//  handled by SNDINTR. 
-/* The Linux target selects SNDSERV in the Makefile. */
-//#define SNDINTR  1
-
-
-// This one switches between MIT SHM (no proper mouse)
-// and XFree86 DGA (mickey sampling). The original
-// linuxdoom used SHM, which is default.
-//#define X11_DGA		1
-
 
 //
 // For resize of screen, at start of game.

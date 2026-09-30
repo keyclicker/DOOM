@@ -41,9 +41,6 @@ rcsid[] = "$Id: r_data.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 #include "doomstat.h"
 #include "r_sky.h"
 
-#ifdef LINUX
-#include  <alloca.h>
-#endif
 
 
 #include "r_data.h"
@@ -848,7 +845,6 @@ void R_PrecacheLevel (void)
 
 
 
-#ifdef HARDWARE_RENDER
 /* Compose RG index/coverage texels without relying on opaque column caches. */
 byte *R_TexturePixels(int number, int *width, int *height)
 {
@@ -883,4 +879,3 @@ byte *R_TexturePixels(int number, int *width, int *height)
     }
     return data;
 }
-#endif

@@ -109,11 +109,11 @@ def main():
     parser.add_argument('--wad', type=Path, help='embed this local IWAD')
     args = parser.parse_args()
     wad = read_wad(args.wad) if args.wad else b''
-    vendor = WEB.parent / 'vendor/xz-decompress'
-    decoder = (vendor / 'xz-decompress.min.js').read_bytes()
+    library = WEB.parent / 'lib/xz-decompress'
+    decoder = (library / 'xz-decompress.min.js').read_bytes()
     if hashlib.sha256(decoder).hexdigest() != DECODER_SHA256:
         raise ValueError('Vendored XZ decoder does not match its pinned hash')
-    decoder += b'\n/*\n' + (vendor / 'LICENSE').read_bytes() + b'\n*/'
+    decoder += b'\n/*\n' + (library / 'LICENSE').read_bytes() + b'\n*/'
 
     parts = [page(args.build, compact=True).encode('utf-8'),
              (args.build / 'doom.wasm').read_bytes(),

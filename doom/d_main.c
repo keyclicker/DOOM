@@ -31,22 +31,18 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 #define	FGCOLOR		8
 
 
-#ifdef NORMALUNIX
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#endif
 
 
 #include "doomdef.h"
 #include "doomstat.h"
-#ifdef HARDWARE_RENDER
 #include "r_gpu.h"
 #include "i_render.h"
-#endif
 
 #include "dstrings.h"
 #include "sounds.h"
@@ -77,29 +73,15 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 
 #include "p_setup.h"
 #include "r_local.h"
-#ifdef VARIABLE_VIDEO
 #include "r_view.h"
 #include "v_view.h"
-#endif
-#ifdef EXTENDED_MENU
 #include "m_settings.h"
-#endif
-#ifdef EXTERNAL_LOOP
 #include "d_frame.h"
-#endif
 
 
 #include "d_main.h"
 
-//
-// D-DoomLoop()
-// Not a globally visible function,
-//  just included for source reference,
-//  called by D_DoomMain, never exits.
-// Manages timing and IO,
-//  calls all ?_Responder, ?_Ticker, and ?_Drawer,
-//  calls I_GetTime, I_StartFrame, and I_StartTic
-//
+/* Initialize graphics and recording, then return to the browser loop. */
 void D_DoomLoop (void);
 
 
@@ -212,11 +194,7 @@ void D_Display (void)
     static  boolean		fullscreen = false;
     static  gamestate_t		oldgamestate = -1;
     static  int			borderdrawcount;
-    int				nowtime;
-    int				tics;
-    int				wipestart;
     int				y;
-    boolean			done;
     boolean			wipe;
     boolean			redrawsbar;
 
@@ -229,10 +207,8 @@ void D_Display (void)
     if (setsizeneeded)
     {
 	R_ExecuteSetViewSize ();
-#ifdef HARDWARE_RENDER
         /* Repaint artwork when leaving the geometry framebuffer. */
         if (r_hardware_frame) redrawsbar = true;
-#endif
 	oldgamestate = -1;                      // force background redraw
 	borderdrawcount = 3;
     }
@@ -241,15 +217,12 @@ void D_Display (void)
     if (gamestate != wipegamestate)
     {
 	wipe = true;
-#ifdef HARDWARE_RENDER
         if (r_hardware) I_RenderCapture(screens[0]);
-#endif
 	wipe_StartScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
     }
     else
 	wipe = false;
 
-#ifdef HARDWARE_RENDER
     r_hardware_frame = r_hardware && !wipe && gamestate == GS_LEVEL
         && !automapactive && gametic;
     if (r_hardware_frame) {
@@ -257,13 +230,10 @@ void D_Display (void)
         redrawsbar = true;
         borderdrawcount = 3;
     }
-#endif
     if (gamestate == GS_LEVEL && gametic)
     {
-#ifdef EXTENDED_MENU
         if (m_show_fps && scaledviewwidth != 320)
             R_VideoErase(0, 320 * 10);
-#endif
         HU_Erase();
     }
     
@@ -279,7 +249,6 @@ void D_Display (void)
 	    redrawsbar = true;
 	if (inhelpscreensstate && !inhelpscreens)
 	    redrawsbar = true;              // just put away the help screen
-#ifdef VARIABLE_VIDEO
         {
             V_FillStatusSides();
             v_ui_anchor = V_UI_BOTTOM;
@@ -287,9 +256,6 @@ void D_Display (void)
                 redrawsbar || menuactive || menuactivestate);
             v_ui_anchor = V_UI_CENTER;
         }
-#else
-	ST_Drawer (viewheight == 200, redrawsbar );
-#endif
 	fullscreen = viewheight == 200;
 	break;
 
@@ -312,22 +278,14 @@ void D_Display (void)
     // draw the view directly
     if (gamestate == GS_LEVEL && !automapactive && gametic)
     {
-#ifdef VARIABLE_VIDEO
         R_RenderView(&players[displayplayer]);
-#else
-        R_RenderPlayerView(&players[displayplayer]);
-#endif
     }
 
     if (gamestate == GS_LEVEL && gametic)
     {
-#ifdef VARIABLE_VIDEO
         v_ui_anchor = V_UI_TOP;
-#endif
         HU_Drawer();
-#ifdef VARIABLE_VIDEO
         v_ui_anchor = V_UI_CENTER;
-#endif
     }
     
     // clean up border stuff
@@ -371,9 +329,7 @@ void D_Display (void)
     }
 
 
-#ifdef EXTENDED_MENU
     M_DrawFPS();
-#endif
     // menus go directly to the screen
     M_Drawer ();          // menu is drawn even on top of everything
     NetUpdate ();         // send out any new accumulation
@@ -389,27 +345,8 @@ void D_Display (void)
     // wipe update
     wipe_EndScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
 
-#ifdef EXTERNAL_LOOP
     /* Continue the melt on later host frames. */
     D_BeginWipe();
-#else
-    wipestart = I_GetTime () - 1;
-
-    do
-    {
-	do
-	{
-	    nowtime = I_GetTime ();
-	    tics = nowtime - wipestart;
-	} while (!tics);
-	wipestart = nowtime;
-	done = wipe_ScreenWipe(wipe_Melt
-			       , 0, 0, SCREENWIDTH, SCREENHEIGHT, tics);
-	I_UpdateNoBlit ();
-	M_Drawer ();                            // menu is drawn even on top of wipes
-	I_FinishUpdate ();                      // page flip or blit buffer
-    } while (!done);
-#endif
 }
 
 
@@ -434,48 +371,7 @@ void D_DoomLoop (void)
 	
     I_InitGraphics ();
 
-#ifdef EXTERNAL_LOOP
-    /* The host owns the loop; return to its event thread. */
-    return;
-#endif
-    while (1)
-    {
-	// frame syncronous IO operations
-	I_StartFrame ();                
-	
-	// process one or more tics
-	if (singletics)
-	{
-	    I_StartTic ();
-	    D_ProcessEvents ();
-	    G_BuildTiccmd (&netcmds[consoleplayer][maketic%BACKUPTICS]);
-	    if (advancedemo)
-		D_DoAdvanceDemo ();
-	    M_Ticker ();
-	    G_Ticker ();
-	    gametic++;
-	    maketic++;
-	}
-	else
-	{
-	    TryRunTics (); // will run at least one tic
-	}
-		
-	S_UpdateSounds (players[consoleplayer].mo);// move positional sounds
-
-	// Update display, next frame, with current state.
-	D_Display ();
-
-#ifndef SNDSERV
-	// Sound mixing for the buffer is snychronous.
-	I_UpdateSound();
-#endif	
-	// Synchronous sound output is explicitly called.
-#ifndef SNDINTR
-	// Update sound output.
-	I_SubmitSound();
-#endif
-    }
+    /* The browser advances subsequent frames through D_AdvanceFrame. */
 }
 
 
@@ -644,7 +540,6 @@ void IdentifyVersion (void)
     char*	plutoniawad;
     char*	tntwad;
 
-#ifdef NORMALUNIX
     char *home;
     char *doomwaddir;
     doomwaddir = getenv("DOOMWADDIR");
@@ -684,7 +579,6 @@ void IdentifyVersion (void)
     if (!home)
       I_Error("Please set $HOME to your home directory");
     sprintf(basedefault, "%s/.doomrc", home);
-#endif
 
     if (M_CheckParm ("-shdev"))
     {
@@ -1209,14 +1103,14 @@ void D_DoomMain (void)
     {
 	singledemo = true;              // quit after one demo
 	G_DeferedPlayDemo (myargv[p+1]);
-	D_DoomLoop ();  // never returns
+	D_DoomLoop ();  // initialize the browser-driven loop
     }
 	
     p = M_CheckParm ("-timedemo");
     if (p && p < myargc-1)
     {
 	G_TimeDemo (myargv[p+1]);
-	D_DoomLoop ();  // never returns
+	D_DoomLoop ();  // initialize the browser-driven loop
     }
 	
     p = M_CheckParm ("-loadgame");
@@ -1239,5 +1133,5 @@ void D_DoomMain (void)
 
     }
 
-    D_DoomLoop ();  // never returns
+    D_DoomLoop ();  // initialize the browser-driven loop
 }

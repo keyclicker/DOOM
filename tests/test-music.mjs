@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 const module = await WebAssembly.compile(
-  await readFile(new URL('../build/web/music.wasm', import.meta.url)));
+  await readFile(new URL('../build/music.wasm', import.meta.url)));
 assert.equal(WebAssembly.Module.imports(module).length, 0);
 const paths = process.argv.slice(2);
 assert(paths.length, 'Pass at least one original IWAD path.');

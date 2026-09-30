@@ -35,13 +35,8 @@ rcsid[] = "$Id: r_draw.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 #include "w_wad.h"
 
 #include "r_local.h"
-#ifdef VARIABLE_VIDEO
 #include "r_view.h"
 #include "v_view.h"
-#else
-#define VID_WIDTH SCREENWIDTH
-#define VID_HEIGHT SCREENHEIGHT
-#endif
 
 // Needs access to LFB (guess what).
 #include "v_video.h"
@@ -703,10 +698,8 @@ R_InitBuffer
 { 
     int		i; 
 
-#ifdef VARIABLE_VIDEO
     R_InitViewBuffer(width, height, ylookup, columnofs);
     return;
-#endif
     // Handle resize,
     //  e.g. smaller view windows
     //  with border and/or status bar.
@@ -833,9 +826,7 @@ R_VideoErase
   //  a 32bit CPU, as GNU GCC/Linux libc did
   //  at one point.
     memcpy (screens[0]+ofs, screens[1]+ofs, count);
-#ifdef VARIABLE_VIDEO
     V_CopyViewBorder(ofs, count);
-#endif
 } 
 
 

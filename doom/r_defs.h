@@ -32,14 +32,9 @@
 #include "m_fixed.h"
 
 /* Keep off-screen raster edges wide until clipping at native resolutions. */
-#ifdef VARIABLE_VIDEO
 #include <stdint.h>
 typedef int64_t raster_fixed_t;
 #define R_RasterMul(a, b) (((int64_t)(a) * (b)) >> FRACBITS)
-#else
-typedef fixed_t raster_fixed_t;
-#define R_RasterMul(a, b) FixedMul(a, b)
-#endif
 
 // We rely on the thinker data struct
 // to handle sound origins in sectors.
@@ -62,11 +57,7 @@ typedef fixed_t raster_fixed_t;
 #define SIL_TOP			2
 #define SIL_BOTH		3
 
-#ifdef VARIABLE_VIDEO
 #define MAXDRAWSEGS 1024
-#else
-#define MAXDRAWSEGS 256
-#endif
 
 
 
@@ -481,20 +472,8 @@ typedef struct
   
   // leave pads for [minx-1]/[maxx+1]
   
-#ifdef VARIABLE_VIDEO
   unsigned short pad1, top[R_MAXWIDTH], pad2;
   unsigned short pad3, bottom[R_MAXWIDTH], pad4;
-#else
-  byte		pad1;
-  // Here lies the rub for all
-  //  dynamic resize/change of resolution.
-  byte		top[SCREENWIDTH];
-  byte		pad2;
-  byte		pad3;
-  // See above.
-  byte		bottom[SCREENWIDTH];
-  byte		pad4;
-#endif
 
 } visplane_t;
 

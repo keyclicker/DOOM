@@ -28,11 +28,7 @@
 #pragma interface
 #endif
 
-#ifdef VARIABLE_VIDEO
 #define MAXVISSPRITES 512
-#else
-#define MAXVISSPRITES 128
-#endif
 
 extern vissprite_t	vissprites[MAXVISSPRITES];
 extern vissprite_t*	vissprite_p;

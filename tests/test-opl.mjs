@@ -11,18 +11,19 @@ import {fileURLToPath} from 'node:url';
 
 const [source, ...wadPaths] = process.argv.slice(2);
 assert(source && wadPaths.length,
-  'Usage: node doom/web/test-opl.mjs CHOCOLATE_DOOM_SOURCE IWAD [...]');
-const web = fileURLToPath(new URL('.', import.meta.url));
+  'Usage: node tests/test-opl.mjs CHOCOLATE_DOOM_SOURCE IWAD [...]');
+const root = fileURLToPath(new URL('..', import.meta.url));
 const upstream = resolve(source);
 const temporary = await mkdtemp(join(tmpdir(), 'doom-opl-'));
 
 /** Build each driver with its own chip code and test-only trace exports. */
 async function build(reference) {
   const path = join(temporary, reference ? 'reference.wasm' : 'port.wasm');
-  execFileSync('emcc', [join(web, 'tests/opl-driver.c'),
+  execFileSync('emcc', [join(root, 'tests/opl-driver.c'),
     reference ? join(upstream, 'opl/opl3.c')
-      : join(web, '../vendor/nuked-opl3/opl3.c'),
-    '-I' + web, '-I' + join(web, '..'), '-I' + temporary, '-I' + join(upstream, 'src'),
+      : join(root, 'lib/nuked-opl3/opl3.c'),
+    '-I' + root, '-I' + join(root, 'doom'), '-I' + temporary,
+    '-I' + join(upstream, 'src'),
     '-I' + join(upstream, 'opl'), ...(reference ? ['-DOPL_REFERENCE'] : []),
     '-O2', '-flto', '-fwrapv', '--no-entry', '-sSTANDALONE_WASM=1',
     '-sFILESYSTEM=0', '-sINITIAL_MEMORY=2097152', '-sSTACK_SIZE=65536',

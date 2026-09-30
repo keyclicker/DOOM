@@ -38,15 +38,8 @@ rcsid[] = "$Id: r_things.c,v 1.5 1997/02/03 16:47:56 b1 Exp $";
 #include "w_wad.h"
 
 #include "r_local.h"
-#ifdef VARIABLE_VIDEO
 #include "r_view.h"
 #include "v_view.h"
-#else
-#define R_LIGHT_WIDTH (viewwidth << detailshift)
-#define R_LIGHT_SCALE(x) (x)
-#define R_VerticalScale(x) (x)
-#define R_VerticalInverse(x) (x)
-#endif
 
 #include "doomstat.h"
 
@@ -487,10 +480,8 @@ void R_ProjectSprite (mobj_t* thing)
     angle_t		ang;
     fixed_t		iscale;
     
-#ifdef VARIABLE_VIDEO
     /* The interpolated camera can trail behind its own player object. */
     if (thing == viewplayer->mo) return;
-#endif
 
     // transform the origin point
     tr_x = thing->x - viewx;
@@ -512,11 +503,7 @@ void R_ProjectSprite (mobj_t* thing)
     tx = -(gyt+gxt); 
 
     // too far off the side?
-#ifdef VARIABLE_VIDEO
     if ((long long)abs(tx) > (long long)tz * 8)
-#else
-    if (abs(tx)>(tz<<2))
-#endif
 	return;
     
     // decide which patch to use for sprite relative to player

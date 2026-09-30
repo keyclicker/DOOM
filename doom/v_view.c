@@ -1,9 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include <string.h>
 #include "doomstat.h"
-#ifdef HARDWARE_RENDER
 #include "r_gpu.h"
-#endif
 #include "m_misc.h"
 #include "m_swap.h"
 #include "r_view.h"
@@ -15,7 +13,6 @@
 int vid_width = 320, vid_height = 200;
 int vid_square_pixels, v_ui_anchor;
 byte *vid_screen;
-#ifdef HARDWARE_RENDER
 uint32_t v_overlay[V_UI_LAYERS][320 * 200];
 v_overlay_layout_t v_overlay_layout;
 static uint32_t overlay_order;
@@ -33,7 +30,6 @@ static void overlay_pixel(int layer, int offset, byte color)
 {
     v_overlay[layer][offset] = (++overlay_order << 8) | color;
 }
-#endif
 int v_ui_height = 200;
 static int ui_width = 320, ui_x, ui_y;
 extern int screenblocks, detailLevel;
@@ -55,13 +51,11 @@ boolean V_SetMode(int width, int height, int square_pixels)
         / (vid_square_pixels ? 4 : 8);
     ui_x = (width - ui_width) / 2;
     ui_y = (vid_height - v_ui_height) / 2;
-#ifdef HARDWARE_RENDER
     v_overlay_layout.x = ui_x;
     v_overlay_layout.y = ui_y;
     v_overlay_layout.width = ui_width;
     v_overlay_layout.height = v_ui_height;
     v_overlay_layout.square_pixels = vid_square_pixels;
-#endif
     V_BlitView();
     R_SetViewSize(screenblocks, detailLevel);
     return true;
@@ -72,12 +66,10 @@ static void ui_pixel(int x, int y, byte color)
 {
     int left, right, top, bottom, row;
     if ((unsigned)x >= 320 || (unsigned)y >= 200) return;
-#ifdef HARDWARE_RENDER
     if (r_hardware_frame) {
         overlay_pixel(v_ui_anchor, y * 320 + x, color);
         return;
     }
-#endif
     left = ui_x + x * ui_width / 320;
     right = ui_x + (x + 1) * ui_width / 320;
     row = v_ui_anchor == V_UI_BOTTOM ? vid_height - v_ui_height
@@ -96,11 +88,7 @@ void V_DrawViewPatch(int x, int y, patch_t *patch, int flipped)
     column_t *post;
     byte *source;
     if (!vid_screen || (vid_width == 320 && vid_height == 200
-        && !vid_square_pixels
-#ifdef HARDWARE_RENDER
-        && !r_hardware_frame
-#endif
-        )) return;
+        && !vid_square_pixels && !r_hardware_frame)) return;
     x -= SHORT(patch->leftoffset);
     y -= SHORT(patch->topoffset);
     width = SHORT(patch->width);
@@ -147,11 +135,7 @@ void V_CopyViewPixels(int offset, int count)
 {
     int i;
     if (!vid_screen || (vid_width == 320 && vid_height == 200
-        && !vid_square_pixels
-#ifdef HARDWARE_RENDER
-        && !r_hardware_frame
-#endif
-        )) return;
+        && !vid_square_pixels && !r_hardware_frame)) return;
     for (i = offset; i < offset + count && i < 64000; i++)
         if (i >= 0) ui_pixel(i % 320, i / 320, screens[0][i]);
 }
@@ -161,18 +145,12 @@ void V_CopyViewBorder(int offset, int count)
 {
     int i, x, y, left, right, row;
     if (!vid_screen || (vid_width == 320 && vid_height == 200
-        && !vid_square_pixels
-#ifdef HARDWARE_RENDER
-        && !r_hardware_frame
-#endif
-        )) return;
+        && !vid_square_pixels && !r_hardware_frame)) return;
     for (i = offset; i < offset + count && i < 64000; i++) {
-#ifdef HARDWARE_RENDER
         if (r_hardware_frame) {
             overlay_pixel(V_UI_BORDER, i, screens[0][i]);
             continue;
         }
-#endif
         x = i % 320;
         y = i / 320;
         left = x * vid_width / 320;
@@ -199,12 +177,10 @@ void V_FillStatusSides(void)
     int x, y, first;
     byte *flat;
     if (!vid_screen || !ui_x || R_LogicalHeight() == 200) return;
-#ifdef HARDWARE_RENDER
     if (r_hardware_frame) {
         v_overlay_layout.status_sides = 1;
         return;
     }
-#endif
     flat = V_BackgroundFlat();
     first = vid_height - 32 * v_ui_height / 200;
     for (y = first; y < vid_height; y++) {

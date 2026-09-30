@@ -3,9 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "doomstat.h"
-#ifdef HARDWARE_RENDER
 #include "r_gpu.h"
-#endif
 #include "m_misc.h"
 #include "p_local.h"
 #include "r_local.h"
@@ -20,9 +18,7 @@ static struct {
     mobj_t *object;
     fixed_t x, y, z;
     angle_t angle;
-#ifdef HARDWARE_RENDER
     float pitch;
-#endif
     pspdef_t weapon[NUMPSPRITES];
 } camera;
 
@@ -64,9 +60,7 @@ void R_Snapshot(void)
     camera.y = player->mo->y;
     camera.z = player->viewz;
     camera.angle = player->mo->angle;
-#ifdef HARDWARE_RENDER
     camera.pitch = r_pitch;
-#endif
     memcpy(camera.weapon, player->psprites, sizeof(camera.weapon));
     if (numsectors > sector_capacity) {
         sector_capacity = numsectors;
@@ -134,14 +128,12 @@ void R_InterpolateCamera(player_t *player)
         * fraction / FRACUNIT;
 }
 
-#ifdef HARDWARE_RENDER
 /* Pitch shares the camera's snapshot and resets with map/renderer changes. */
 float R_InterpolatePitch(float pitch)
 {
     return camera.valid && !paused
         ? camera.pitch + (pitch - camera.pitch) * fraction / FRACUNIT : pitch;
 }
-#endif
 
 /* Select the fraction of the 35 Hz interval to present on this display frame. */
 void R_SetFraction(int value)
@@ -197,10 +189,8 @@ void R_RenderInterpolatedView(player_t *player)
             player->psprites[i].sy = blend(camera.weapon[i].sy, weapons[i].sy);
         }
     }
-#ifdef HARDWARE_RENDER
     if (r_hardware_frame) R_RenderGeometry(player);
     else
-#endif
     R_RenderPlayerView(player);
     if (interpolate) {
         for (i = 0; i < sector_count; i++) {
