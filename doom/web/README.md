@@ -111,7 +111,8 @@ renderer. Select the renderer or filter again to retry.
 
 ## CRT filters
 
-Clean CRT is our original, comfortable single-pass filter in `crt.js`. The other
+Clean CRT is our original, comfortable single-pass filter in
+[`shaders/clean-crt`](../shaders/clean-crt). The other
 four choices run the human-authored shaders below, using their stock settings:
 
 | Shader / author | Style and useful ideas |
@@ -125,8 +126,8 @@ These are longstanding community choices, not a ranked benchmark. See the
 [Libretro shader guide](https://docs.libretro.com/shader/crt/) and the
 [community's favorite-shader discussion](https://forums.libretro.com/t/what-is-your-favorite-crt-shader/2426).
 The upstream GLSL, Royale preset and phosphor masks are pinned in
-[`vendor/crt`](../vendor/crt/README.md), with authors, licenses and a reproducible
-import manifest. `pack_shaders.py` adapts their legacy GLSL to WebGL 2 at build
+[`shaders/<shader-name>`](../shaders/README.md), with authors, licenses and a
+reproducible import manifest. `pack_shaders.py` adapts their legacy GLSL to WebGL 2 at build
 time, removes unused helper functions, and embeds compressed source and masks
 in the HTML. Browser APIs decode them locally; no CDN or runtime assets are used.
 
@@ -406,4 +407,4 @@ changes. Pause key-offs and release samples are compared as well.
 The port is GPL-2.0; see [LICENSE.TXT](../../LICENSE.TXT). Nuked OPL3 is
 LGPL-2.1-or-later; source revisions and notices are in
 [vendor/README.md](../vendor/README.md). CRT shader licenses and revisions are
-in [vendor/crt/README.md](../vendor/crt/README.md). Game data is separate.
+in [shaders/README.md](../shaders/README.md). Game data is separate.

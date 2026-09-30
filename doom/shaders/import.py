@@ -17,17 +17,18 @@ def main():
             + manifest['revision'] + '/')
     headers = {}
 
-    def extract(text):
+    def extract(text, directory):
         """Share identical includes without changing their preprocessor order."""
         pattern = (r'/\*\*+ BEGIN ([\w.-]+) \*\*+/'
                    r'([\s\S]*?)/\*\*+ END \1 \*\*+/')
         while matches := list(re.finditer(pattern, text)):
             for match in reversed(matches):
-                body, name = extract(match[2]), match[1]
-                if name in headers and headers[name] != body:
+                body, name = extract(match[2], directory), match[1]
+                previous = headers.get(directory / name)
+                if previous is not None and previous != body:
                     digest = hashlib.sha256(body.encode()).hexdigest()[:8]
                     name = Path(name).stem + '-' + digest + Path(name).suffix
-                headers[name] = body
+                headers[directory / name] = body
                 text = (text[:match.start()] + '\n#include "' + name + '"\n'
                         + text[match.end():])
         return text
@@ -42,13 +43,16 @@ def main():
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         for name, data in pool.map(fetch, manifest['files'].items()):
+            path = ROOT / name
+            path.parent.mkdir(parents=True, exist_ok=True)
             if name.endswith('.glsl'):
-                data = extract(data.decode()).encode()
-            (ROOT / name).write_bytes(data)
+                data = extract(data.decode(), Path(name).parent).encode()
+            path.write_bytes(data)
     for name, data in headers.items():
         (ROOT / name).write_text(data)
     # Omit contact addresses; retain author names, dates and license notices.
-    for path in ROOT.iterdir():
+    for name in [*manifest['files'], *headers]:
+        path = ROOT / name
         if path.suffix in ['.glsl', '.glslp', '.h', '.TXT']:
             text = re.sub(r'\s*<[\w.+-]+@[\w.-]+>', '', path.read_text())
             lines = (line.rstrip() for line in text.splitlines())

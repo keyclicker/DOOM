@@ -6,16 +6,16 @@ import re
 import subprocess
 from pathlib import Path
 
-VENDOR = Path(__file__).resolve().parent.parent / 'vendor' / 'crt'
+SHADERS = Path(__file__).resolve().parent.parent / 'shaders'
 
 
-def shader(name, stage):
+def shader(path, stage):
     """Resolve compile-time defaults and restore constant globals for GLSL ES."""
-    source = (VENDOR / name).read_text()
+    source = path.read_text()
     source = re.sub(r'^\s*#(?:version|pragma)[^\n]*', '', source, flags=re.M)
     result = subprocess.run(['cpp', '-P', '-undef', '-D__VERSION__=300',
         '-DGL_ES=1', '-DGL_FRAGMENT_PRECISION_HIGH=1', '-D' + stage,
-        '-I' + str(VENDOR)], input=source, text=True, capture_output=True,
+        '-I' + str(path.parent)], input=source, text=True, capture_output=True,
         check=True).stdout
     # Doom supplies progressive frames, including its 400/600-line modes.
     result = result.replace('bool interlace_detect = true;',
@@ -96,10 +96,12 @@ def reachable(source):
 
 def bundle():
     """Inline compact stages and only the LUTs used by Royale's stock preset."""
-    presets = [[{'file': 'crt-' + name + '.glsl', 'linear': name == 'pi'}]
-               for name in ['lottes', 'pi', 'easymode']]
+    directories = ['crt-lottes', 'crt-pi', 'crt-easymode', 'crt-royale']
+    presets = [[{'file': name + '.glsl', 'linear': name == 'crt-pi'}]
+               for name in directories[:-1]]
+    royale_dir = SHADERS / 'crt-royale'
     values = dict(re.findall(r'^([\w]+)\s*=\s*"([^"]*)"',
-                            (VENDOR / 'crt-royale.glslp').read_text(), re.M))
+                            (royale_dir / 'crt-royale.glslp').read_text(), re.M))
     royale = []
     for i in range(int(values['shaders'])):
         def value(key, default=None):
@@ -114,11 +116,13 @@ def bundle():
             'y': [value('scale_type_y', value('scale_type', 'source')),
                   float(value('scale_y', value('scale', '1')))]})
     presets.append(royale)
-    for preset in presets:
+    for directory, preset in zip(directories, presets):
         for item in preset:
-            item['vertex'] = shader(item['file'], 'VERTEX')
-            item['fragment'] = shader(item['file'], 'FRAGMENT')
-    masks = {key: base64.b64encode((VENDOR / Path(path).name).read_bytes()).decode()
+            path = SHADERS / directory / item['file']
+            item['vertex'] = shader(path, 'VERTEX')
+            item['fragment'] = shader(path, 'FRAGMENT')
+    masks = {key: base64.b64encode(
+                 (royale_dir / Path(path).name).read_bytes()).decode()
              for key, path in values.items() if key.endswith('_small')}
     data = json.dumps({'presets': presets, 'masks': masks}, separators=(',', ':'))
     packed = gzip.compress(data.encode(), mtime=0)

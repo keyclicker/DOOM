@@ -29,7 +29,7 @@ $(O)/music.wasm: $(MUSIC_OBJECTS)
 $(O)/index.html: $(O)/doom.js $(O)/doom.wasm $(O)/music.wasm \
     web/pack.py web/shell.html web/app.js web/audio.js web/settings.js web/render.js \
     web/music-worklet.js web/crt.js web/crt-presets.js web/pack_shaders.py \
-    $(wildcard vendor/crt/*)
+    $(wildcard shaders/*/*)
 	$(PYTHON) web/pack.py $(O)
 
 -include $(MUSIC_OBJECTS:.o=.d)

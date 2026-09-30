@@ -29,5 +29,5 @@ Instrument data comes from the user's WAD, not from these sources.
 ## CRT filters
 
 The four selectable upstream filters and Royale masks are documented in
-[crt/README.md](crt/README.md), including authors, licenses, pinned source
+[shaders/README.md](../shaders/README.md), including authors, licenses, pinned source
 hashes and WebGL adaptations. They are bundled locally into the HTML.
