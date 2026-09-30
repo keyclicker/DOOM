@@ -961,11 +961,38 @@ char    detailNames[2][9]	= {"M_GDHIGH","M_GDLOW"};
 char	msgNames[2][9]		= {"M_MSGOFF","M_MSGON"};
 
 
+#ifdef WEB
+/* Collapse the two legacy slider spacer rows in the compact Options page. */
+static int M_WebOptionY(int item)
+{
+    return 44 + LINEHEIGHT * (item - (item > option_empty1)
+        - (item > option_empty2));
+}
+
+/* Keep every option and its slider above the status bar, in one font. */
 void M_DrawOptions(void)
 {
-#ifdef WEB
-    M_WriteText(60, OptionsDef.y + LINEHEIGHT * websettings, "SETTINGS");
-#endif
+    static char *labels[] = {"END GAME", "MESSAGES", "GRAPHIC DETAIL",
+        "SCREEN SIZE", "", "MOUSE SENSITIVITY", "", "SOUND VOLUME",
+        "SETTINGS"};
+    char *value;
+    int i;
+
+    V_DrawPatchDirect(108, 15, 0, W_CacheLumpName("M_OPTTTL", PU_CACHE));
+    for (i = 0; i < opt_end; i++)
+        if (OptionsMenu[i].status != -1)
+            M_WriteText(54, M_WebOptionY(i), labels[i]);
+    value = showMessages ? "ON" : "OFF";
+    M_WriteText(280 - M_StringWidth(value), M_WebOptionY(messages), value);
+    value = detailLevel ? "LOW" : "HIGH";
+    M_WriteText(280 - M_StringWidth(value), M_WebOptionY(detail), value);
+    M_DrawThermo(184, M_WebOptionY(mousesens) - 2, 10, mouseSensitivity);
+    M_DrawThermo(184, M_WebOptionY(scrnsize) - 2, 9, screenSize);
+    M_WriteText(54, 156, "ESC: BACK");
+}
+#else
+void M_DrawOptions(void)
+{
     V_DrawPatchDirect (108,15,0,W_CacheLumpName("M_OPTTTL",PU_CACHE));
 	
     V_DrawPatchDirect (OptionsDef.x + 175,OptionsDef.y+LINEHEIGHT*detail,0,
@@ -980,6 +1007,7 @@ void M_DrawOptions(void)
     M_DrawThermo(OptionsDef.x,OptionsDef.y+LINEHEIGHT*(scrnsize+1),
 		 9,screenSize);
 }
+#endif
 
 void M_Options(int choice)
 {
@@ -1424,7 +1452,7 @@ static int web_presets[2][10] = {
      'a', 'd', KEY_RCTRL, 'e', KEY_RALT, KEY_RSHIFT}
 };
 static int web_capture = -1;
-static char *web_binding_hint = "ENTER: CHANGE KEY";
+static char *web_binding_hint = "ENTER: CHANGE KEY  ESC: BACK";
 
 /* Derive the preset label from bindings, including individually edited keys. */
 static int M_WebPresetIndex(void)
@@ -1457,12 +1485,26 @@ static char *M_WebKeyName(int key)
     }
 }
 
+/* Center a stable-width group, reserving room for its longest possible value. */
+static int web_value_x;
+static void M_WebLayout(char **labels, int count, char *widest_value)
+{
+    int i, width = 0;
+    for (i = 0; i < count; i++) {
+        int label_width = M_StringWidth(labels[i]);
+        if (label_width > width) width = label_width;
+    }
+    if (widest_value) width += 24 + M_StringWidth(widest_value);
+    currentMenu->x = (320 - width) / 2;
+    web_value_x = currentMenu->x + width;
+}
+
 /* Keep paired labels and values inside the original 320-pixel menu area. */
 static void M_WebRow(int row, char *label, char *value)
 {
     int y = 64 + row * LINEHEIGHT;
-    M_WriteText(54, y, label);
-    if (value) M_WriteText(300 - M_StringWidth(value), y, value);
+    M_WriteText(currentMenu->x, y, label);
+    if (value) M_WriteText(web_value_x - M_StringWidth(value), y, value);
 }
 
 /* Draw the selected settings page using IWAD artwork and the HUD font. */
@@ -1476,41 +1518,49 @@ static void M_WebDraw(void)
     static char *resolutions[] = {"NATIVE", "320X200", "640X400", "960X600",
         "1280X800", "1600X1000", "1920X1200"};
     static char *presets[] = {"ORIGINAL", "WASD", "CUSTOM"};
+    static char *video[] = {"RESOLUTION", "ASPECT RATIO"};
+    static char *performance[] = {"UNLOCK FPS", "FPS COUNTER"};
+    static char *keyboard[] = {"MOVEMENT", "ACTIONS", "PRESET"};
     char dimensions[32];
     char *title = "SETTINGS";
-    char *hint = "BACKSPACE: BACK";
+    char *hint = "ESC: BACK";
     int i, first;
 
     V_DrawPatchDirect(108, 15, 0, W_CacheLumpName("M_OPTTTL", PU_CACHE));
     if (currentMenu == &WebSettingsMenu) {
+        M_WebLayout(root, 4, NULL);
         for (i = 0; i < 4; i++) M_WebRow(i, root[i], NULL);
     } else if (currentMenu == &WebVideoMenu) {
         title = "VIDEO";
-        M_WebRow(0, "RESOLUTION", resolutions[web_resolution]);
-        M_WebRow(1, "ASPECT RATIO", web_aspect ? "BROWSER" : "4:3");
+        M_WebLayout(video, 2, "1920X1200");
+        M_WebRow(0, video[0], resolutions[web_resolution]);
+        M_WebRow(1, video[1], web_aspect ? "BROWSER" : "4:3");
         sprintf(dimensions, "%d X %d", web_width, web_height);
         M_WriteText((320 - M_StringWidth(dimensions)) / 2, 128, dimensions);
-        hint = "LEFT / RIGHT: CHANGE";
+        hint = "LEFT/RIGHT: CHANGE  ESC: BACK";
     } else if (currentMenu == &WebPerformanceMenu) {
         title = "PERFORMANCE";
-        M_WebRow(0, "UNLOCK FPS", web_unlocked ? "ON" : "OFF");
-        M_WebRow(1, "FPS COUNTER", web_show_fps ? "ON" : "OFF");
-        hint = "LEFT / RIGHT: CHANGE";
+        M_WebLayout(performance, 2, "OFF");
+        M_WebRow(0, performance[0], web_unlocked ? "ON" : "OFF");
+        M_WebRow(1, performance[1], web_show_fps ? "ON" : "OFF");
+        hint = "LEFT/RIGHT: CHANGE  ESC: BACK";
     } else if (currentMenu == &WebKeyboardMenu) {
         title = "KEYBOARD";
-        M_WebRow(0, "MOVEMENT", NULL);
-        M_WebRow(1, "ACTIONS", NULL);
-        M_WebRow(2, "PRESET", presets[M_WebPresetIndex()]);
+        M_WebLayout(keyboard, 3, "ORIGINAL");
+        M_WebRow(0, keyboard[0], NULL);
+        M_WebRow(1, keyboard[1], NULL);
+        M_WebRow(2, keyboard[2], presets[M_WebPresetIndex()]);
     } else {
         first = currentMenu == &WebMovementMenu ? 0 : 6;
         title = first ? "ACTIONS" : "MOVEMENT";
+        M_WebLayout(actions + first, currentMenu->numitems, "BACKSPACE");
         for (i = 0; i < currentMenu->numitems; i++)
             M_WebRow(i, actions[first + i], web_capture == first + i
                 ? "?" : M_WebKeyName(*Web_Binding(first + i)));
         hint = web_binding_hint;
     }
     M_WriteText((320 - M_StringWidth(title)) / 2, 38, title);
-    M_WriteText((320 - M_StringWidth(hint)) / 2, 160, hint);
+    M_WriteText((320 - M_StringWidth(hint)) / 2, 156, hint);
 }
 
 /* Enter settings from Options, preserving each page's last selected row. */
@@ -1526,7 +1576,7 @@ static void M_WebPage(int choice)
         M_SetupNextMenu(choice == 0 ? &WebVideoMenu
             : choice == 1 ? &WebPerformanceMenu : &WebKeyboardMenu);
     else {
-        web_binding_hint = "ENTER: CHANGE KEY";
+        web_binding_hint = "ENTER: CHANGE KEY  ESC: BACK";
         M_SetupNextMenu(choice == 0 ? &WebMovementMenu : &WebActionMenu);
     }
 }
@@ -1572,7 +1622,7 @@ static boolean M_WebCapture(event_t *ev)
     if (ev->type != ev_keydown) return ev->type != ev_keyup;
     if (key == KEY_ESCAPE) {
         web_capture = -1;
-        web_binding_hint = "ENTER: CHANGE KEY";
+        web_binding_hint = "ENTER: CHANGE KEY  ESC: BACK";
         return true;
     }
     if (!((key >= 32 && key <= 126) || key == KEY_ENTER
@@ -1591,7 +1641,7 @@ static boolean M_WebCapture(event_t *ev)
     }
     *Web_Binding(web_capture) = key;
     web_capture = -1;
-    web_binding_hint = "ENTER: CHANGE KEY";
+    web_binding_hint = "ENTER: CHANGE KEY  ESC: BACK";
     S_StartSound(NULL, sfx_pistol);
     Web_SettingsChanged();
     return true;
@@ -1964,6 +2014,14 @@ boolean M_Responder (event_t* ev)
 	return true;
 		
       case KEY_ESCAPE:
+#ifdef WEB
+        if (currentMenu->prevMenu) {
+            currentMenu->lastOn = itemOn;
+            M_SetupNextMenu(currentMenu->prevMenu);
+            S_StartSound(NULL, sfx_swtchn);
+            return true;
+        }
+#endif
 	currentMenu->lastOn = itemOn;
 	M_ClearMenus ();
 	S_StartSound(NULL,sfx_swtchx);
@@ -2070,6 +2128,17 @@ void M_Drawer (void)
     if (currentMenu->routine)
 	currentMenu->routine();         // call Draw routine
     
+#ifdef WEB
+    /* The compact font needs a matching cursor, aligned with its actual rows. */
+    if (currentMenu == &OptionsDef || currentMenu->routine == M_WebDraw) {
+        x = currentMenu == &OptionsDef ? 54 : currentMenu->x;
+        y = currentMenu == &OptionsDef ? M_WebOptionY(itemOn)
+            : currentMenu->y + itemOn * LINEHEIGHT;
+        Web_DrawHalfPatch(x - 20, y - 1,
+            W_CacheLumpName(skullName[whichSkull], PU_CACHE));
+        return;
+    }
+#endif
     // DRAW MENU
     x = currentMenu->x;
     y = currentMenu->y;

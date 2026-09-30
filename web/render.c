@@ -157,6 +157,32 @@ void Web_DrawPatch(int x, int y, patch_t *patch, int flipped)
     }
 }
 
+/* Sample the original skull at half size, preserving transparent pixels. */
+void Web_DrawHalfPatch(int x, int y, patch_t *patch)
+{
+    int col, i, px, py, source_y;
+    byte color;
+    column_t *post;
+    x -= SHORT(patch->leftoffset) / 2;
+    y -= SHORT(patch->topoffset) / 2;
+    for (col = 0; col < SHORT(patch->width); col += 2) {
+        px = x + col / 2;
+        if ((unsigned)px >= 320) continue;
+        post = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
+        while (post->topdelta != 255) {
+            for (i = post->topdelta & 1; i < post->length; i += 2) {
+                source_y = post->topdelta + i;
+                py = y + source_y / 2;
+                if ((unsigned)py >= 200) continue;
+                color = ((byte *)post)[3 + i];
+                screens[0][py * 320 + px] = color;
+                if (web_screen) ui_pixel(px, py, color);
+            }
+            post = (column_t *)((byte *)post + post->length + 4);
+        }
+    }
+}
+
 /* Mirror copied status-bar and border spans after the logical buffer changes. */
 void Web_CopyPixels(int offset, int count)
 {

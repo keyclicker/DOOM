@@ -23,6 +23,12 @@ export async function testSettings(evaluate, send) {
       for (const byte of pixels) result = Math.imul(result ^ byte, 16777619);
       return result >>> 0;
     };
+    const closeMenus = () => {
+      for (let depth = 0; (e._web_state() & 16) && depth < 8; depth++) key(27);
+      check(!(e._web_state() & 16), 'Menu stack did not close');
+    };
+    Doom.testCloseMenus = closeMenus;
+    closeMenus();
     key(189); key(13); tick(80);
     const settings = () => {
       key(27); key(111); key(13); key(116); key(13);
@@ -32,13 +38,30 @@ export async function testSettings(evaluate, send) {
     e._web_save_defaults();
     check(/screenblocks\\s+10/.test(e.FS.readFile('/.doomrc', {encoding: 'utf8'})),
       'Default view must fill the screen with the status bar visible');
+    // Escape returns one level, and cancels capture without leaving its page.
+    settings(); page('v'); key(27);
+    check(e._web_state() & 16, 'Escape closed the settings stack');
+    page('p'); key(117); key(174);
+    check(e._web_setting(2) === 1, 'Escape did not return to Settings');
+    key(174); key(27); page('k'); page('m');
+    key(13); key(27); key(13); key(119);
+    check(e._web_binding(0) === 119, 'Escape left the key-capture page');
+    key(13); key(173);
+    check(e._web_binding(0) === 173, 'Could not restore the captured binding');
+    for (let level = 0; level < 4; level++) {
+      key(27);
+      check(e._web_state() & 16, 'Escape skipped a parent menu');
+    }
+    key(27);
+    check(!(e._web_state() & 16), 'Main menu Escape did not resume play');
+
     settings(); page('v');
 
     const frames = [];
     for (const scale of [1, 2, 3, 4, 5, 6]) {
       if (scale > 1) key(174);
       check(e._web_setting(0) === scale, 'Native resolution menu failed');
-      key(27);
+      closeMenus();
       tick(3); Doom.draw();
       check(Doom.canvas.width === 320 * scale
         && Doom.canvas.height === 200 * scale, 'Resolution did not change');
@@ -63,7 +86,7 @@ export async function testSettings(evaluate, send) {
     }
     key(97); key(174);
     check(e._web_setting(1) === 1, 'Native aspect menu failed');
-    key(27); tick(3); Doom.draw();
+    closeMenus(); tick(3); Doom.draw();
     check(Doom.canvas.classList.contains('browser-aspect'), 'Aspect not applied');
     const aspect = Doom.canvas.getBoundingClientRect();
     check(aspect.width === innerWidth && aspect.height === innerHeight,
@@ -203,7 +226,7 @@ export async function testSettings(evaluate, send) {
     check(e._web_binding(1) === 175, 'Duplicate binding accepted');
     key(9);
     check(e._web_binding(1) === 175, 'Reserved binding accepted');
-    key(27); key(27);
+    key(27); closeMenus();
     tick(80);
     // Save the same position, then compare movement from each key after reload.
     key(188); key(13); key(13); tick(5);
@@ -229,7 +252,7 @@ export async function testSettings(evaluate, send) {
       'Native performance settings not applied');
     Settings.frames = 0; Settings.sampleTime = 1000;
     for (let i = 1; i <= 60; i++) Settings.presented(1000 + i * 1000 / 60);
-    key(27);
+    closeMenus();
     e._web_render(65536); const withCounter = hash();
     e._web_fps(99); e._web_render(65536);
     check(hash() !== withCounter, 'FPS counter is not in the framebuffer');
@@ -247,7 +270,7 @@ export async function testSettings(evaluate, send) {
       }).join(',');
     };
     e._web_render(65536); const cleanBar = bar();
-    settings(); page('k'); page('m'); key(27);
+    settings(); page('k'); page('m'); closeMenus();
     e._web_render(65536);
     check(bar() === cleanBar, 'Menu left pixels on the status bar');
     settings(); page('k'); page('m'); Doom.draw();
@@ -258,12 +281,33 @@ export async function testSettings(evaluate, send) {
     const {data} = await send('Page.captureScreenshot', {format: 'png'});
     await writeFile(process.env.DOOM_SCREENSHOTS + '-settings.png',
       Buffer.from(data, 'base64'));
-    await evaluate('Doom.engine._web_key(27, 1); Doom.engine._web_tick(); '
-      + 'Doom.engine._web_key(27, 0); Doom.engine._web_tick(); Doom.draw()');
+    await evaluate('Doom.testCloseMenus(); Doom.draw()');
     const screenshot = await send('Page.captureScreenshot', {format: 'png'});
     await writeFile(process.env.DOOM_SCREENSHOTS + '-game.png',
       Buffer.from(screenshot.data, 'base64'));
 
+    for (const page of ['options', 'root', 'performance', 'video', 'actions']) {
+      await evaluate(`(() => {
+        Doom.testCloseMenus();
+        const e = Doom.engine;
+        const key = code => {
+          e._web_key(code, 1); e._web_tick();
+          e._web_key(code, 0); e._web_tick();
+        };
+        key(27); key(111); key(13);
+        if ('${page}' !== 'options') { key(116); key(13); }
+        if ('${page}' === 'performance') { key(112); key(13); }
+        if ('${page}' === 'video') { key(118); key(13); }
+        if ('${page}' === 'actions') {
+          key(107); key(13); key(97); key(13);
+        }
+        Doom.draw();
+      })()`);
+      const {data} = await send('Page.captureScreenshot', {format: 'png'});
+      await writeFile(process.env.DOOM_SCREENSHOTS + '-' + page + '.png',
+        Buffer.from(data, 'base64'));
+    }
+    await evaluate('Doom.testCloseMenus()');
   }
   // A real viewport resize exercises cached projection and buffer recreation.
   await send('Emulation.setDeviceMetricsOverride', {
@@ -308,11 +352,11 @@ export async function testSettings(evaluate, send) {
       e._web_key(code, 1); e._web_tick();
       e._web_key(code, 0); e._web_tick(); Settings.flush();
     };
-    if (e._web_state() & 16) key(27);
+    Doom.testCloseMenus();
     key(27); key(111); key(13); key(116); key(13); key(118); key(13);
     key(114);
     while (e._web_setting(0) !== 0) key(174);
-    key(27);
+    Doom.testCloseMenus();
   })()`);
   for (const [width, height, dpr] of [[1280, 720, 1], [1280, 720, 2],
     [1440, 900, 2], [1920, 1080, 2], [1024, 768, 3], [720, 1280, 2]]) {
@@ -347,9 +391,9 @@ export async function testSettings(evaluate, send) {
       e._web_key(code, 0); e._web_tick(); Settings.flush();
     };
     // Escape closes any page left open for a screenshot, then reopen Options.
-    if (e._web_state() & 16) key(27);
+    Doom.testCloseMenus();
     key(27); key(111); key(13); key(116); key(13); key(114); key(13);
-    key(27);
+    Doom.testCloseMenus();
     Doom.suspended = true;
     Doom.engine._web_tick(); Doom.draw();
     if (Settings.value.scale !== 1 || Settings.value.unlocked
