@@ -1,0 +1,2 @@
+# Base122 payload: keep bytes exact
+*.html -text
