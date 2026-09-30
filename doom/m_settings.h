@@ -10,6 +10,10 @@ extern int m_renderer, m_freelook, m_gpu_failed;
 /* Optional display filtering leaves the selected world renderer unchanged. */
 extern int m_crt, m_crt_failed;
 
+/* Append new actions to preserve saved binding order. */
+#define M_BINDING_COUNT 11
+extern int key_map;
+
 /* Share native action bindings with the menu and host persistence. */
 int *M_Binding(int action);
 

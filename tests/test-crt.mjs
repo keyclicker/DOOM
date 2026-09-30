@@ -94,8 +94,8 @@ export async function testCRT(evaluate, send) {
       for (let i = 0; i < 8 && (e._web_state() & 16); i++) key(27);
     };
     const video = () => {
-      close(); key(27); key(111); key(13); key(116); key(13);
-      key(118); key(13);
+      close(); key(27); key(101); key(13);
+      key(99); key(13);
     };
     const render = () => { e._web_render(65536); Doom.draw(); };
     tick(3); key(13); key(13);
@@ -242,9 +242,9 @@ export async function testCRT(evaluate, send) {
   await evaluate(`(() => {
     Settings.value.crt = true; Settings.apply();
     const {video, key, check, render} = Doom.crtTest;
-    video(); key(27); key(114); key(13); render();
+    video(); key(27); key(112); key(172); render();
     check(!Doom.crtEnabled && !Doom.engine._web_setting(6),
-      'Restore defaults left CRT enabled');
+      'Default preset left CRT enabled');
   })()`);
   console.log('PASS: CRT density-only resize, unavailable WebGL and defaults');
 }
