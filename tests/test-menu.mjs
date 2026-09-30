@@ -73,7 +73,7 @@ export async function testMenu(evaluate, send) {
     const extraPixels = new Uint32Array(e.HEAPU8.buffer,
       e._web_pixels(), 64000);
     for (const [x, y] of [[15, 5], [15, 6], [15, 7], [15, 8], [15, 9],
-      [32, 7], [32, 8], [71, 3]]) {
+      [32, 7], [32, 8], [71, 3], [71, 4]]) {
       const at = (mainY + 32 + y) * 320 + 97 + x;
       check(extraPixels[at] === backdrop[at],
         'Extra Options contains a neighboring glyph pixel');

@@ -896,7 +896,7 @@ static patch_t *M_ExtraOptionsPatch(void)
         {"M_SFXVOL", 28, 16, -1, 0, 0},    /* x */
         {"M_OPTION", 30, 11, 0, 7, 9},    /* t */
         {"M_SCRNSZ", 28, 15, -1, 0, 0},    /* r */
-        {"M_SAVEG", 16, 14, 13, 3, 4}      /* a */
+        {"M_SAVEG", 16, 14, 13, 3, 5}      /* a */
     };
     const byte *post;
     int sizes[72], i, x, column = 0, size = 8 + 72 * 4;
