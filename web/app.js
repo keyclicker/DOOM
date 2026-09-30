@@ -78,7 +78,7 @@ const Doom = {
   },
 
   /** Load bundled or adjacent WASM with a local or embedded IWAD. */
-  async load(file) {
+  async load(file, title = file?.name) {
     if (this.running || this.loading || !file) return;
     this.loading = true;
     try {
@@ -87,14 +87,18 @@ const Doom = {
       }
       // Autoplay restrictions must not hold game startup behind audio.resume().
       this.audio.resume().catch(console.warn);
-      this.message.textContent = 'Loading…';
+      Launcher.loading(title);
+      Launcher.stage('starting music', 0);
       await this.audio.initMusic();
+      Launcher.stage('preparing crt shaders', 1 / 4);
       await DoomRetroCRT.init();
+      Launcher.stage('checking wad', 2 / 4);
       const bytes = new Uint8Array(await file.arrayBuffer());
       const name = inspectWad(bytes);
       const hash = await crypto.subtle.digest('SHA-256', bytes);
       this.storageKey = 'doom:' + Array.from(new Uint8Array(hash),
         b => b.toString(16).padStart(2, '0')).join('');
+      Launcher.stage('starting engine', 3 / 4);
       this.engine = await createDoom({
         wasmBinary: globalThis.doomBundle?.engine,
         locateFile: () => new URL('doom.wasm', location.href).href,
@@ -109,9 +113,7 @@ const Doom = {
       Settings.apply();
       this.running = true;
       delete globalThis.doomBundle;
-      this.loader.querySelectorAll('[data-game]')
-        .forEach(button => button.remove());
-      this.loader.hidden = true;
+      Launcher.hide();
       this.lastFrame = performance.now();
       requestAnimationFrame(time => this.frame(time));
     } catch (error) {
@@ -304,10 +306,7 @@ const Doom = {
     this.audio.suspend();
     document.exitPointerLock?.();
     if (document.fullscreenElement) document.exitFullscreen();
-    this.loader.hidden = false;
-    this.message.textContent = 'Game closed. Reload to play again.';
-    this.loader.querySelectorAll('button')
-      .forEach(button => button.hidden = true);
+    Launcher.closed();
   },
 
   /** Display a recoverable load error without adding game chrome. */
@@ -315,8 +314,7 @@ const Doom = {
     console.error(error);
     this.running = false;
     this.audio.suspend();
-    this.loader.hidden = false;
-    this.message.textContent = error.message || String(error);
+    Launcher.error(error.message || String(error));
   },
 };
 
@@ -355,40 +353,14 @@ function syncModifiers(event) {
   }
 }
 
-/** Offer a picker or collection; start a sole embedded IWAD automatically. */
-function setupLoader() {
-  const choose = document.querySelector('#choose');
-  choose.onclick = () => {
-    Doom.audio.resume().catch(console.warn);
-    document.querySelector('#file').click();
-  };
-  const games = globalThis.doomBundle?.wads || [];
-  if (!games.length) return;
-  choose.hidden = true;
-  Doom.message.textContent = games.length === 1 ? 'Loading…' : 'Choose a game';
-  if (games.length === 1) {
-    queueMicrotask(() => Doom.load(games[0].file));
-    return;
-  }
-  for (const [index, game] of games.entries()) {
-    const button = document.createElement('button');
-    button.dataset.game = index;
-    button.textContent = game.title;
-    button.onclick = () => Doom.load(game.file);
-    Doom.message.before(button);
-  }
-}
-setupLoader();
-document.querySelector('#file').onchange = event => Doom.load(event.target.files[0]);
-document.ondragover = event => event.preventDefault();
-document.ondrop = event => {
-  event.preventDefault();
-  Doom.load(event.dataTransfer.files[0]);
-};
+Launcher.init();
 Doom.canvas.onclick = () => Doom.capture();
 document.oncontextmenu = event => event.preventDefault();
 document.onkeydown = event => {
-  if (!Doom.running) return;
+  if (!Doom.running) {
+    if (Launcher.key(event)) event.preventDefault();
+    return;
+  }
   if (Doom.audio.context?.state === 'suspended') {
     Doom.audio.resume().catch(console.warn);
   }

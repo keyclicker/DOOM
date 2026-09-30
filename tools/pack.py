@@ -15,7 +15,7 @@ def page(out, compact=False):
     """Assemble either the ordinary page or source for the single-file packer."""
     html = (WEB / 'shell.html').read_text()
     scripts = ['audio.js', 'render.js', 'crt.js', 'crt-presets.js',
-               'app.js', 'settings.js']
+               'launcher.js', 'app.js', 'settings.js']
     code = '\n'.join((WEB / name).read_text() for name in scripts)
     worklet = (WEB / 'music-worklet.js').read_text()
     code = code.replace('/* MUSIC_WORKLET */', json.dumps(worklet))
@@ -29,7 +29,7 @@ def page(out, compact=False):
         'CRT-Easymode: EasyMode, GPL.\n'
         'CRT-Royale: Copyright 2014 TroggleMonkey, GPL-2.0-or-later.\n'
         'WebGL adaptations: 2026. Source and notices: '
-        'https://github.com/keyclicker/DOOM\n')
+        'https://github.com/keyclicker/DOOM.html\n')
     code = code.replace('/* CRT_LICENSE */', '/*!\n' + notices
         + (SHADERS / 'crt-royale/LICENSE.TXT').read_text() + '\n*/')
     code = (out / 'doom.js').read_text() + '\n' + code
