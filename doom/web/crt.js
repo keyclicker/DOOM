@@ -4,6 +4,7 @@
 class DoomCRT {
   constructor(canvas, context) {
     this.canvas = canvas;
+    this.mode = 1;
     const gl = this.gl = context || canvas.getContext('webgl2', {
       alpha: false, antialias: false, depth: false, stencil: false,
       powerPreference: 'high-performance',
@@ -63,6 +64,16 @@ class DoomCRT {
     });
   }
 
+  /** Replace the active preset, releasing its intermediate GPU resources. */
+  select(mode) {
+    if (mode === this.mode) return;
+    this.preset?.dispose();
+    this.preset = null;
+    this.mode = 1;
+    if (mode > 1) this.preset = new DoomRetroCRT(this.gl, mode);
+    this.mode = mode;
+  }
+
   /** Upload software output only; hardware passes its existing color texture. */
   software(bytes, width, height) {
     const gl = this.gl;
@@ -90,6 +101,10 @@ class DoomCRT {
   /** Reconstruct at display density; do not add a source-sized blur buffer. */
   present(texture, width, height, flip = false) {
     const gl = this.gl;
+    if (this.preset) {
+      this.preset.present(texture, width, height, this.canvas, flip);
+      return;
+    }
     const u = this.locations;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);

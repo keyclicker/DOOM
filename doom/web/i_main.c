@@ -53,9 +53,9 @@ EMSCRIPTEN_KEEPALIVE void web_renderer(int enabled, int look, int failed)
 }
 
 /* Display filtering is host-owned and does not reset camera interpolation. */
-EMSCRIPTEN_KEEPALIVE void web_crt(int enabled, int failed)
+EMSCRIPTEN_KEEPALIVE void web_crt(int mode, int failed)
 {
-    m_crt = !!enabled;
+    m_crt = mode >= 0 && mode < 6 ? mode : 0;
     m_crt_failed = !!failed;
 }
 

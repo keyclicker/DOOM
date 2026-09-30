@@ -23,7 +23,8 @@ const Settings = {
       aspect: input?.aspect === 'browser' ? 'browser' : 'classic',
       unlocked: input?.unlocked === true, fps: input?.fps === true,
       renderer: input?.renderer === true,
-      crt: input?.crt === true,
+      crt: input?.crt === true ? 1
+        : [0, 1, 2, 3, 4, 5].includes(input?.crt) ? input.crt : 0,
       freelook: input?.renderer === true && input?.freelook === true,
       keys: [...this.defaults]};
     const keys = Array.isArray(input?.keys) ? input.keys.map(key =>
@@ -97,7 +98,7 @@ const Settings = {
   /** Validate backend availability before enabling native geometry rendering. */
   renderer() {
     const failed = Doom.renderer(this.value.renderer, this.value.crt);
-    this.value.crt = !!Doom.crtEnabled;
+    this.value.crt = Number(Doom.crtEnabled);
     Doom.engine._web_crt(this.value.crt, Doom.crtFailed);
     this.value.renderer = !!Doom.hardware;
     this.value.freelook = this.value.renderer && this.value.freelook;
@@ -133,7 +134,7 @@ const Settings = {
         aspect: e._web_setting(1) ? 'browser' : 'classic',
         unlocked: !!e._web_setting(2), fps: !!e._web_setting(3),
         renderer: !!e._web_setting(4), freelook: !!e._web_setting(5),
-        crt: !!e._web_setting(6),
+        crt: e._web_setting(6),
         keys: this.defaults.map((_, i) => e._web_binding(i))};
       Doom.release();
       this.renderer();

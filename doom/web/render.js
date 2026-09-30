@@ -9,14 +9,21 @@ function doomGLProgram(gl, vertex, fragment) {
     gl.shaderSource(shader, '#version 300 es\nprecision highp float;\n'
       + 'precision highp int;\n' + text);
     gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
-      throw new Error(gl.getShaderInfoLog(shader));
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const message = gl.getShaderInfoLog(shader);
+      gl.deleteShader(shader);
+      gl.deleteProgram(program);
+      throw new Error(message);
+    }
     gl.attachShader(program, shader);
     gl.deleteShader(shader);
   }
   gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS))
-    throw new Error(gl.getProgramInfoLog(program));
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const message = gl.getProgramInfoLog(program);
+    gl.deleteProgram(program);
+    throw new Error(message);
+  }
   return program;
 }
 
@@ -498,7 +505,7 @@ class DoomRenderer {
         gl.RGBA, gl.UNSIGNED_BYTE, bytes);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    if (this.cleanCRT) {
+    if (this.crtEnabled) {
       this.crt.present(this.color, this.width, this.height);
     } else {
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.framebuffer);

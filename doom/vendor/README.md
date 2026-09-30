@@ -1,4 +1,6 @@
-# Music synthesis sources
+# Vendored sources
+
+## Music synthesis
 
 `nuked-opl3/opl3.c` and `opl3.h` are unmodified Nuked OPL3 1.8 sources,
 vendored from [nukeykt/Nuked-OPL3](https://github.com/nukeykt/Nuked-OPL3)
@@ -23,3 +25,9 @@ only a test dependency; it is not copied into the production build.
 
 Both are built locally. There are no runtime package or asset downloads.
 Instrument data comes from the user's WAD, not from these sources.
+
+## CRT filters
+
+The four selectable upstream filters and Royale masks are documented in
+[crt/README.md](crt/README.md), including authors, licenses, pinned source
+hashes and WebGL adaptations. They are bundled locally into the HTML.

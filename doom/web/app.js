@@ -86,6 +86,7 @@ const Doom = {
       await this.audio.resume();
       this.message.textContent = 'Loading…';
       await this.audio.initMusic();
+      await DoomRetroCRT.init();
       const bytes = new Uint8Array(await file.arrayBuffer());
       const name = inspectWad(bytes);
       const hash = await crypto.subtle.digest('SHA-256', bytes);
@@ -145,7 +146,7 @@ const Doom = {
   },
 
   /** Keep the software context intact when switching the visible canvas. */
-  renderer(enabled, crt = false) {
+  renderer(enabled, crt = 0) {
     this.softwareCanvas ??= this.canvas;
     let failed = false;
     this.crtFailed = false;
@@ -179,6 +180,7 @@ const Doom = {
     if (crt && enabled) {
       try {
         this.graphics.crt ??= new DoomCRT(this.graphics.canvas, this.graphics.gl);
+        this.graphics.crt.select(Number(crt));
       } catch (error) {
         console.warn('Disabling CRT:', error);
         crt = false;
@@ -210,7 +212,17 @@ const Doom = {
         }
       }
     }
-    if (this.graphics) this.graphics.cleanCRT = crt && enabled;
+    if (crt && !enabled) {
+      try { this.crtDisplay.select(Number(crt)); }
+      catch (error) {
+        console.warn('Disabling CRT:', error);
+        crt = 0;
+        this.crtFailed = true;
+      }
+    }
+    if (this.graphics?.crt && !(crt && enabled)) this.graphics.crt.select(0);
+    if (this.crtDisplay && !(crt && !enabled)) this.crtDisplay.select(0);
+    if (this.graphics) this.graphics.crtEnabled = crt && enabled;
     this.crtEnabled = crt;
     const canvas = enabled ? this.graphics.canvas
       : crt ? this.crtDisplay.canvas : this.softwareCanvas;

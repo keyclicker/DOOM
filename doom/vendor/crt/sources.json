@@ -1,0 +1,86 @@
+{
+  "repository": "https://github.com/libretro/glsl-shaders",
+  "revision": "f8e23ff880668f0f0e837a05a316534d82a7f31b",
+  "files": {
+    "crt-lottes.glsl": {
+      "path": "crt/shaders/crt-lottes.glsl",
+      "sha256": "699a947fc2744eb7e2dc4adb2c08a8b74e31685baa77cbc1face9593106b57ef"
+    },
+    "crt-pi.glsl": {
+      "path": "crt/shaders/crt-pi.glsl",
+      "sha256": "dc2676b46f57a12501acc1792637c6b52363a7cc1c91f97b80abb2a670aa81d6"
+    },
+    "crt-easymode.glsl": {
+      "path": "crt/shaders/crt-easymode.glsl",
+      "sha256": "ed27bab460c53d98fcf727333210de0d746c957c86463028d8c0e4c15e29f3ab"
+    },
+    "crt-royale.glslp": {
+      "path": "crt/crt-royale.glslp",
+      "sha256": "4e717081154b59eebabbd2d8f7f650488b28374a5ea3241a45ade8350488a533"
+    },
+    "LICENSE.TXT": {
+      "path": "crt/shaders/crt-royale/LICENSE.TXT",
+      "sha256": "d8c320ffc0030d1b096ae4732b50d2b811cf95e9a9b7377c1127b2563e0a0388"
+    },
+    "TileableLinearApertureGrille15Wide8And5d5SpacingResizeTo64.png": {
+      "path": "crt/shaders/crt-royale/TileableLinearApertureGrille15Wide8And5d5SpacingResizeTo64.png",
+      "sha256": "3ba708dba5989741c58d9b7a1d1e38499bb6dabeb6787da523c9ca6e06159215"
+    },
+    "TileableLinearSlotMaskTall15Wide9And4d5Horizontal9d14VerticalSpacingResizeTo64.png": {
+      "path": "crt/shaders/crt-royale/TileableLinearSlotMaskTall15Wide9And4d5Horizontal9d14VerticalSpacingResizeTo64.png",
+      "sha256": "b3ab2c1d9205e167c44fc86aeb5a031a4fe7199de728d52f94e11635a467ab6d"
+    },
+    "TileableLinearShadowMaskEDPResizeTo64.png": {
+      "path": "crt/shaders/crt-royale/TileableLinearShadowMaskEDPResizeTo64.png",
+      "sha256": "d68808ef5c819555c6001ea2d0627c18e64a7d0a7a6ebb3af4a09261a4c23713"
+    },
+    "crt-royale-first-pass-linearize-crt-gamma-bob-fields.glsl": {
+      "path": "crt/shaders/crt-royale/src/crt-royale-first-pass-linearize-crt-gamma-bob-fields.glsl",
+      "sha256": "ece014b2b994346a44fedb6c03c57662ae1d16e5abd7ce79105dbd7c364bf7ff"
+    },
+    "crt-royale-scanlines-vertical-interlacing.glsl": {
+      "path": "crt/shaders/crt-royale/src/crt-royale-scanlines-vertical-interlacing.glsl",
+      "sha256": "621d81c694d92fced7510560cfdbb5aa97bdcbb4cc5c8120453039a783fbe064"
+    },
+    "crt-royale-bloom-approx.glsl": {
+      "path": "crt/shaders/crt-royale/src/crt-royale-bloom-approx.glsl",
+      "sha256": "803a53490628142a8e95a3f06dc0c7febce3457bda70b8f0b855f4d19102260b"
+    },
+    "blur9fast-vertical.glsl": {
+      "path": "crt/../blurs/shaders/royale/blur9fast-vertical.glsl",
+      "sha256": "eb37d685b238573444dd0b25b362c51a1a06fc8a54c1e758908b6e8b9d37233c"
+    },
+    "blur9fast-horizontal.glsl": {
+      "path": "crt/../blurs/shaders/royale/blur9fast-horizontal.glsl",
+      "sha256": "4bce1de8798c52637fbbd74702c14bbde3ac6dcd16e269d511ab96d3c9494fc7"
+    },
+    "crt-royale-mask-resize-vertical.glsl": {
+      "path": "crt/shaders/crt-royale/src/crt-royale-mask-resize-vertical.glsl",
+      "sha256": "5dd65d249edd6460ae0dfbdbac12bb49d2cd40d3962f28f29f217fc107ccc5a8"
+    },
+    "crt-royale-mask-resize-horizontal.glsl": {
+      "path": "crt/shaders/crt-royale/src/crt-royale-mask-resize-horizontal.glsl",
+      "sha256": "1d98dee81b53765e31775cb00035b40b585e050c9606d8e80f3882ee83bf35de"
+    },
+    "crt-royale-scanlines-horizontal-apply-mask.glsl": {
+      "path": "crt/shaders/crt-royale/src/crt-royale-scanlines-horizontal-apply-mask.glsl",
+      "sha256": "1f301b83052ab84d68c716050ff3823ecba9bc3152e0f1633cb4fe8a528f93da"
+    },
+    "crt-royale-brightpass.glsl": {
+      "path": "crt/shaders/crt-royale/src/crt-royale-brightpass.glsl",
+      "sha256": "6d09cb5d760ee092000da62d81960c615f69b98bc3160e9718fd6719c604a45b"
+    },
+    "crt-royale-bloom-vertical.glsl": {
+      "path": "crt/shaders/crt-royale/src/crt-royale-bloom-vertical.glsl",
+      "sha256": "00d5521c4c6037a6a0715cfdeb7728df4f296e26670ccc2065fd404cd1a996ca"
+    },
+    "crt-royale-bloom-horizontal-reconstitute.glsl": {
+      "path": "crt/shaders/crt-royale/src/crt-royale-bloom-horizontal-reconstitute.glsl",
+      "sha256": "6a57bacdee4510b861ff55b5f7fd6c95aa4276c5747ab7b98d44ef89948e21ad"
+    },
+    "crt-royale-geometry-aa-last-pass.glsl": {
+      "path": "crt/shaders/crt-royale/src/crt-royale-geometry-aa-last-pass.glsl",
+      "sha256": "ae473412b567c28d1ffc5d81e958f5f508c3b4b26482c43bdbebcfabc098f7f8"
+    }
+  }
+}
