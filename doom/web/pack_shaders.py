@@ -94,7 +94,7 @@ def reachable(source):
     return re.sub(r'\n+', '\n', source)
 
 
-def bundle():
+def bundle(compressed=True):
     """Inline compact stages and only the LUTs used by Royale's stock preset."""
     directories = ['crt-lottes', 'crt-pi', 'crt-easymode', 'crt-royale']
     presets = [[{'file': name + '.glsl', 'linear': name == 'crt-pi'}]
@@ -125,5 +125,7 @@ def bundle():
                  (royale_dir / Path(path).name).read_bytes()).decode()
              for key, path in values.items() if key.endswith('_small')}
     data = json.dumps({'presets': presets, 'masks': masks}, separators=(',', ':'))
+    if not compressed:
+        return data
     packed = gzip.compress(data.encode(), mtime=0)
     return json.dumps(base64.b64encode(packed).decode())

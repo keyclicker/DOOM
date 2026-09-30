@@ -31,3 +31,10 @@ Instrument data comes from the user's WAD, not from these sources.
 The four selectable upstream filters and Royale masks are documented in
 [shaders/README.md](../shaders/README.md), including authors, licenses, pinned source
 hashes and WebGL adaptations. They are bundled locally into the HTML.
+
+## Offline unpacking
+
+The single-file build embeds [`xz-decompress` 0.2.3](xz-decompress/README.md),
+an MIT-licensed browser decoder containing XZ Embedded and walloc. It is gzip
+compressed with its license notices and unpacked locally through browser APIs.
+The normal three-file build does not include it.

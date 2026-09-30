@@ -6,10 +6,13 @@ class DoomRetroCRT {
   /** Decode bundled source and mask images once, before the game starts. */
   static async init() {
     if (this.data) return;
-    const bytes = Uint8Array.from(atob(/* CRT_SHADERS */), c => c.charCodeAt(0));
-    const stream = new Blob([bytes]).stream()
-      .pipeThrough(new DecompressionStream('gzip'));
-    this.data = JSON.parse(await new Response(stream).text());
+    const bundled = /* CRT_SHADERS */;
+    if (typeof bundled === 'string') {
+      const bytes = Uint8Array.from(atob(bundled), c => c.charCodeAt(0));
+      const stream = new Blob([bytes]).stream()
+        .pipeThrough(new DecompressionStream('gzip'));
+      this.data = JSON.parse(await new Response(stream).text());
+    } else this.data = bundled;
     this.masks = await Promise.all(Object.entries(this.data.masks)
       .map(async ([name, encoded]) => {
         const png = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));

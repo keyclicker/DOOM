@@ -77,7 +77,7 @@ const Doom = {
     } catch (error) { console.warn('Could not persist saves:', error); }
   },
 
-  /** Load only the adjacent WASM; there are no remote assets or libraries. */
+  /** Load bundled or adjacent WASM with a local or embedded IWAD. */
   async load(file) {
     if (this.running || this.loading || !file) return;
     this.loading = true;
@@ -93,6 +93,7 @@ const Doom = {
       this.storageKey = 'doom:' + Array.from(new Uint8Array(hash),
         b => b.toString(16).padStart(2, '0')).join('');
       this.engine = await createDoom({
+        wasmBinary: globalThis.doomBundle?.engine,
         locateFile: () => new URL('doom.wasm', location.href).href,
         print: text => console.log(text),
         printErr: text => console.error(text),
@@ -104,6 +105,7 @@ const Doom = {
       this.context = this.canvas.getContext('2d', {alpha: false});
       Settings.apply();
       this.running = true;
+      delete globalThis.doomBundle;
       this.loader.hidden = true;
       this.lastFrame = performance.now();
       requestAnimationFrame(time => this.frame(time));
@@ -348,9 +350,17 @@ function syncModifiers(event) {
 }
 
 document.querySelector('#choose').onclick = () => {
+  if (globalThis.doomBundle?.wad) {
+    Doom.load(globalThis.doomBundle.wad);
+    return;
+  }
   Doom.audio.resume().catch(console.warn);
   document.querySelector('#file').click();
 };
+if (globalThis.doomBundle?.wad) {
+  document.querySelector('#choose').textContent = 'Play DOOM';
+  Doom.message.textContent = 'Click to start';
+}
 document.querySelector('#file').onchange = event => Doom.load(event.target.files[0]);
 document.ondragover = event => event.preventDefault();
 document.ondrop = event => {
