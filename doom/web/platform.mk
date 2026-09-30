@@ -8,6 +8,7 @@ CFLAGS += $(OPT) -flto -Wno-error=implicit-function-declaration \
     -Wno-error=incompatible-pointer-types
 LDFLAGS += $(OPT) -flto --no-entry -sENVIRONMENT=web -sMODULARIZE=1 \
     -sEXPORT_NAME=createDoom -sFILESYSTEM=1 \
+    -sINCOMING_MODULE_JS_API=locateFile,wasmBinary,print,printErr \
     -sEXPORTED_RUNTIME_METHODS=FS,HEAPU8 -sALLOW_MEMORY_GROWTH=1 \
     -sINITIAL_MEMORY=33554432 -sMAXIMUM_MEMORY=536870912 \
     -sSTACK_SIZE=1048576 -sMALLOC=emmalloc -sASSERTIONS=0 -sINVOKE_RUN=0
@@ -33,3 +34,12 @@ $(O)/index.html: $(O)/doom.js $(O)/doom.wasm $(O)/music.wasm \
 	$(PYTHON) web/pack.py $(O)
 
 -include $(MUSIC_OBJECTS:.o=.d)
+
+# Explicit private target: the distributable target never reads a WAD.
+.PHONY: single single-wad
+single: $(TARGET)
+	$(PYTHON) web/pack_single.py $(O)
+
+single-wad: $(TARGET)
+	@test -n "$(WAD)" || { echo 'Usage: make single-wad WAD=/path/to/DOOM.WAD'; exit 1; }
+	$(PYTHON) web/pack_single.py $(O) --wad "$(WAD)"

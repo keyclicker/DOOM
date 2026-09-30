@@ -1,4 +1,4 @@
-# Doom in three files
+# Doom in the browser
 
 The original Linux Doom 1.10 engine and software renderer, compiled to
 WebAssembly. Load a local IWAD and play with the original settings by default.
@@ -21,11 +21,71 @@ when a user selects a file; browsers may require the additional click.
 Deploy **`index.html`, `doom.wasm`, and `music.wasm`** from `doom/build/web` side by side
 on any static HTTPS server. Localhost HTTP also works. Opening the HTML
 directly with `file://` does not work because browsers restrict WASM fetching.
-WADs are read locally and never uploaded, bundled, or automatically fetched.
+WADs are read locally and never uploaded or automatically fetched. The optional
+private build below can embed an IWAD explicitly supplied at build time.
 
 Tested IWADs: Doom shareware 1.9, Ultimate Doom, and Doom II 1.9. IWAD contents
 determine the game mode, so filenames and filename capitalization do not
 matter. PWAD overlays and newer source-port map formats are outside this port.
+
+## Compressed single-file builds
+
+In addition to the build tools above, install `terser` and `zopfli` on PATH.
+Tested with Terser 5.51.2 and Zopfli 1.0.3. The build uses Python's `lzma`
+module; no package installation or network access happens during packaging.
+
+```sh
+# Distributable: the player selects their own WAD.
+make -C doom single
+
+# Private: includes exactly this local IWAD. Do not redistribute game data.
+make -C doom single-wad WAD=/absolute/path/to/DOOM.WAD
+```
+
+Outputs are `doom/build/web/single/DOOM.html` and
+`doom/build/web/single-wad/DOOM.html`, respectively. Each directory also gets
+`DOOM.html.gz`. Both targets preserve all renderers, CRT filters, music, saves,
+and settings. Software rendering and the original settings remain the defaults.
+The ordinary three-file build remains available through `make -C doom`.
+
+Open **DOOM.html directly**, including offline with `file://`. The private build
+shows **Play DOOM** instead of the WAD picker. A click starts audio and requests
+fullscreen; browsers may require another click on the canvas to capture input.
+Saves still use browser local storage; moving/renaming a local HTML can change
+which storage the browser exposes. Keep a stable file location for saves.
+
+The `.gz` companion is for downloading or serving with
+`Content-Type: text/html; charset=utf-8` and `Content-Encoding: gzip`.
+Decompress it before opening locally. Serve the plain HTML as UTF-8 without
+transcoding or HTML minification: its Base122 attributes contain significant
+control characters. Editing the generated file as text can corrupt the payload.
+
+`pack_single.py` minifies JavaScript, then compresses the HTML, raw shader data,
+both WASM modules, and optional WAD together with XZ. Six LZMA2 context choices
+are tried at the extreme preset with a 16 MiB dictionary and a deep match
+search; the smallest wins. Base122 adds about 14.3% instead of Base64's 33.3%.
+Native gzip unpacks the embedded XZ decoder. Zopfli uses 100 iterations for that
+decoder and the final gzip companion; this trades build time for file size.
+All decoding happens once, before gameplay, with no asset requests. A small
+length-prefixed archive avoids a general-purpose ZIP/tar library. Binary bytes
+are verified after compression; XZ also checks CRC32 during browser startup.
+
+The XZ decoder is pinned locally in
+[`vendor/xz-decompress`](../vendor/xz-decompress/README.md). Its source and license
+notices ship in the HTML. The generated artifacts and WADs are ignored by Git.
+Never publish the `single-wad` output as a project release.
+
+Run the existing gameplay/music/save tests against either local HTML:
+
+```sh
+DOOM_HTML=doom/build/web/single/DOOM.html \
+  node doom/web/test.mjs /path/to/DOOM.WAD
+DOOM_HTML=doom/build/web/single-wad/DOOM.html \
+  node doom/web/test.mjs /path/to/the/same/DOOM.WAD
+```
+
+`DOOM_PRESETS_ONLY=1` selects the CRT suite instead. The harness drives the real
+file input or Play button, verifies the IWAD hash, and rejects network requests.
 
 ## Controls
 

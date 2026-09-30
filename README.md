@@ -104,6 +104,14 @@ Deploy only `index.html`, `doom.wasm`, and `music.wasm` from `doom/build/web/`.
 `doom.js` and the object files are build intermediates, not runtime assets.
 WADs and build outputs are never part of the source distribution.
 
+For one compressed HTML that opens offline, run `make -C doom single`.
+To embed a local IWAD for personal use, run
+`make -C doom single-wad WAD=/absolute/path/to/DOOM.WAD`.
+These targets also need Terser and Zopfli. See the
+[single-file instructions](doom/web/README.md#compressed-single-file-builds)
+for output paths, compression, and deployment. Only the WAD-less build may be
+included in project releases.
+
 Historical release notes remain in [README.TXT](README.TXT) and `doom/README.*`.
 The engine is GPL-2.0; see [LICENSE.TXT](LICENSE.TXT). Third-party provenance
 and licensing are in [doom/vendor/README.md](doom/vendor/README.md).

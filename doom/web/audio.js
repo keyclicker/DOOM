@@ -18,25 +18,25 @@ class DoomAudio {
   /** Compile once off the audio thread; the worklet source is inlined. */
   async initMusic() {
     if (this.music) return;
-    const url = URL.createObjectURL(new Blob([/* MUSIC_WORKLET */],
-      {type: 'text/javascript'}));
-    try {
-      const [module] = await Promise.all([
-        WebAssembly.compileStreaming(
+    // Worklet module fetches reject blob:null origins when opened via file://.
+    const url = 'data:text/javascript,' + encodeURIComponent(/* MUSIC_WORKLET */);
+    const [module] = await Promise.all([
+      globalThis.doomBundle
+        ? WebAssembly.compile(globalThis.doomBundle.music)
+        : WebAssembly.compileStreaming(
           fetch(new URL('music.wasm', location.href))),
-        this.context.audioWorklet.addModule(url),
-      ]);
-      this.music = new AudioWorkletNode(this.context, 'doom-music', {
-        numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
-        processorOptions: {module},
-      });
-      this.music.connect(this.context.destination);
-      this.music.port.onmessage = ({data}) => {
-        if (data.error) Doom.fail(new Error(data.error));
-      };
-      this.music.onprocessorerror = () =>
-        Doom.fail(new Error('Music processor failed'));
-    } finally { URL.revokeObjectURL(url); }
+      this.context.audioWorklet.addModule(url),
+    ]);
+    this.music = new AudioWorkletNode(this.context, 'doom-music', {
+      numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
+      processorOptions: {module},
+    });
+    this.music.connect(this.context.destination);
+    this.music.port.onmessage = ({data}) => {
+      if (data.error) Doom.fail(new Error(data.error));
+    };
+    this.music.onprocessorerror = () =>
+      Doom.fail(new Error('Music processor failed'));
   }
 
   /** Transfer only the copied lump, never the engine's entire WASM memory. */

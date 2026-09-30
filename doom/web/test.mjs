@@ -7,11 +7,12 @@ import {testCRT} from './test-crt.mjs';
 import {testCRTPresets} from './test-crt-presets.mjs';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
+import {createHash} from 'node:crypto';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const root = fileURLToPath(new URL('../build/web/', import.meta.url));
 const wadPaths = process.argv.slice(2).map(p => resolve(p));
@@ -30,7 +31,9 @@ const server = createServer(async (request, response) => {
   response.end(await readFile(files[path]));
 });
 await new Promise(done => server.listen(0, '127.0.0.1', done));
-const url = `http://127.0.0.1:${server.address().port}/`;
+const url = process.env.DOOM_HTML
+  ? pathToFileURL(resolve(process.env.DOOM_HTML)).href
+  : `http://127.0.0.1:${server.address().port}/`;
 const profile = await mkdtemp(join(tmpdir(), 'doom-browser-'));
 const browser = spawn(process.env.CHROMIUM || 'chromium', [
   '--headless', '--enable-unsafe-swiftshader', '--no-first-run', '--no-default-browser-check',
@@ -93,17 +96,35 @@ try {
     return result.result.value;
   }
 
+  /** Exercise the real picker or embedded-WAD button, including file://. */
+  async function loadWad() {
+    if (await evaluate('!!globalThis.doomBundle?.wad')) {
+      await send('Runtime.evaluate', {
+        expression: 'document.querySelector("#choose").click()',
+        userGesture: true,
+      });
+    } else {
+      const {root} = await send('DOM.getDocument');
+      const {nodeId} = await send('DOM.querySelector', {
+        nodeId: root.nodeId, selector: '#file',
+      });
+      await send('DOM.setFileInputFiles', {nodeId, files: [wadPath]});
+    }
+    await until(() => evaluate('Doom.running')).catch(async error => {
+      throw Error(error.message + ': ' + await evaluate('Doom.message.textContent'));
+    });
+    await evaluate('Doom.suspended = true');
+    const hash = createHash('sha256').update(await readFile(wadPath)).digest('hex');
+    assert.equal(await evaluate('Doom.storageKey'), 'doom:' + hash);
+  }
+
   await send('Runtime.enable');
   await send('Network.enable');
   for (wadPath of wadPaths) {
     await send('Page.navigate', {url});
     await until(() => evaluate('typeof Doom !== "undefined"'));
-    await evaluate(`(async () => {
-      localStorage.clear();
-      const bytes = await (await fetch('/test.wad')).arrayBuffer();
-      await Doom.load(new File([bytes], 'test.wad'));
-      Doom.suspended = true;
-    })()`);
+    await evaluate('localStorage.clear()');
+    await loadWad();
     assert(await evaluate('Doom.running'), await evaluate('Doom.message.textContent'));
 
     if (process.env.DOOM_PRESETS_ONLY) {
@@ -121,10 +142,8 @@ try {
       // muzzle flashes, switches and level/title transitions without cheats.
       await send('Page.navigate', {url});
       await until(() => evaluate('typeof Doom !== "undefined" && !Doom.engine'));
+      await loadWad();
       const demos = await evaluate(`(async () => {
-        const bytes = await (await fetch('/test.wad')).arrayBuffer();
-        await Doom.load(new File([bytes], 'test.wad'));
-        Doom.suspended = true;
         Settings.value.renderer = true; Settings.value.freelook = true;
         Settings.value.scale = 1; Settings.value.aspect = 'classic';
         Settings.apply();
@@ -327,12 +346,8 @@ try {
     // A fresh runtime must restore the saved game, not just the MEMFS instance.
     await send('Page.navigate', {url});
     await until(() => evaluate('typeof Doom !== "undefined" && !Doom.engine'));
-    const restored = await evaluate(`(async () => {
-      const bytes = await (await fetch('/test.wad')).arrayBuffer();
-      await Doom.load(new File([bytes], 'test.wad'));
-      Doom.suspended = true;
-      return Doom.engine.FS.readFile('/doomsav0.dsg').length;
-    })()`);
+    await loadWad();
+    const restored = await evaluate("Doom.engine.FS.readFile('/doomsav0.dsg').length");
     assert.equal(restored, result.saveBytes);
 
     const maps = await evaluate(`(() => {
@@ -375,10 +390,8 @@ try {
 
     await send('Page.navigate', {url});
     await until(() => evaluate('typeof Doom !== "undefined" && !Doom.engine'));
+    await loadWad();
     const demoFrames = await evaluate(`(async () => {
-      const bytes = await (await fetch('/test.wad')).arrayBuffer();
-      await Doom.load(new File([bytes], 'test.wad'));
-      Doom.suspended = true;
       let frames = 0;
       for (let i = 0; i < 6000; i++) {
         Doom.engine._web_tick();
@@ -391,7 +404,7 @@ try {
   }
   assert.equal(exceptions.length, 0, JSON.stringify(exceptions));
   assert(requests.every(request => request.startsWith(url)
-    || request.startsWith('blob:' + url)),
+    || request.startsWith('blob:') || request.startsWith('data:')),
     'The game made an external network request');
   console.log(process.env.DOOM_PRESETS_ONLY ? 'PASS: CRT presets and local assets'
     : process.env.DOOM_CRT_ONLY ? 'PASS: CRT rendering and local assets'
