@@ -47,6 +47,9 @@ rcsid[] = "$Id: p_setup.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #include "s_sound.h"
 
 #include "doomstat.h"
+#ifdef HARDWARE_RENDER
+#include "r_gpu.h"
+#endif
 
 
 void	P_SpawnMapThing (mapthing_t*	mthing);
@@ -596,6 +599,9 @@ P_SetupLevel
 	
 #ifdef VARIABLE_VIDEO
     R_ResetInterpolation();
+#ifdef HARDWARE_RENDER
+    R_ResetGeometry();
+#endif
 #endif
     totalkills = totalitems = totalsecret = wminfo.maxfrags = 0;
     wminfo.partime = 180;

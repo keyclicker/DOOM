@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include <string.h>
 #include "doomstat.h"
+#ifdef HARDWARE_RENDER
+#include "r_gpu.h"
+#endif
 #include "m_misc.h"
 #include "m_swap.h"
 #include "r_view.h"
@@ -12,6 +15,9 @@
 int vid_width = 320, vid_height = 200;
 int vid_square_pixels, v_ui_anchor;
 byte *vid_screen;
+#ifdef HARDWARE_RENDER
+byte *vid_alpha;
+#endif
 int v_ui_height = 200;
 static int ui_width = 320, ui_x, ui_y;
 extern int screenblocks, detailLevel;
@@ -27,6 +33,10 @@ boolean V_SetMode(int width, int height, int square_pixels)
     vid_square_pixels = !!square_pixels;
     vid_screen = M_Realloc(vid_screen, width * vid_height);
     memset(vid_screen, 0, width * vid_height);
+#ifdef HARDWARE_RENDER
+    vid_alpha = M_Realloc(vid_alpha, width * height);
+    memset(vid_alpha, 255, width * height);
+#endif
     ui_width = height * (vid_square_pixels ? 4 : 8) / (vid_square_pixels ? 3 : 5);
     if (ui_width > width) ui_width = width;
     v_ui_height = ui_width * (vid_square_pixels ? 3 : 5)
@@ -49,8 +59,12 @@ static void ui_pixel(int x, int y, byte color)
         : v_ui_anchor == V_UI_TOP ? 0 : ui_y;
     top = row + y * v_ui_height / 200;
     bottom = row + (y + 1) * v_ui_height / 200;
-    for (row = top; row < bottom; row++)
+    for (row = top; row < bottom; row++) {
         memset(vid_screen + row * vid_width + left, color, right - left);
+#ifdef HARDWARE_RENDER
+        memset(vid_alpha + row * vid_width + left, 255, right - left);
+#endif
+    }
 }
 
 /* Preserve patch transparency over high-resolution world pixels. */
@@ -60,7 +74,11 @@ void V_DrawViewPatch(int x, int y, patch_t *patch, int flipped)
     column_t *post;
     byte *source;
     if (!vid_screen || (vid_width == 320 && vid_height == 200
-        && !vid_square_pixels)) return;
+        && !vid_square_pixels
+#ifdef HARDWARE_RENDER
+        && !r_hardware_frame
+#endif
+        )) return;
     x -= SHORT(patch->leftoffset);
     y -= SHORT(patch->topoffset);
     width = SHORT(patch->width);
@@ -107,7 +125,11 @@ void V_CopyViewPixels(int offset, int count)
 {
     int i;
     if (!vid_screen || (vid_width == 320 && vid_height == 200
-        && !vid_square_pixels)) return;
+        && !vid_square_pixels
+#ifdef HARDWARE_RENDER
+        && !r_hardware_frame
+#endif
+        )) return;
     for (i = offset; i < offset + count && i < 64000; i++)
         if (i >= 0) ui_pixel(i % 320, i / 320, screens[0][i]);
 }
@@ -117,7 +139,11 @@ void V_CopyViewBorder(int offset, int count)
 {
     int i, x, y, left, right, row;
     if (!vid_screen || (vid_width == 320 && vid_height == 200
-        && !vid_square_pixels)) return;
+        && !vid_square_pixels
+#ifdef HARDWARE_RENDER
+        && !r_hardware_frame
+#endif
+        )) return;
     for (i = offset; i < offset + count && i < 64000; i++) {
         x = i % 320;
         y = i / 320;
@@ -125,9 +151,13 @@ void V_CopyViewBorder(int offset, int count)
         right = (x + 1) * vid_width / 320;
         for (row = y * (vid_height - 32 * v_ui_height / 200) / 168;
              row < (y + 1) * (vid_height - 32 * v_ui_height / 200) / 168
-                && row < vid_height; row++)
+                && row < vid_height; row++) {
+#ifdef HARDWARE_RENDER
+            memset(vid_alpha + row * vid_width + left, 255, right - left);
+#endif
             memset(vid_screen + row * vid_width + left, screens[0][i],
                 right - left);
+        }
     }
 }
 
@@ -143,6 +173,9 @@ void V_FillStatusSides(void)
     for (y = first; y < vid_height; y++) {
         for (x = 0; x < vid_width; x++) {
             if (x >= ui_x && x < ui_x + ui_width) continue;
+#ifdef HARDWARE_RENDER
+            vid_alpha[y * vid_width + x] = 255;
+#endif
             vid_screen[y * vid_width + x] =
                 flat[((y * 200 / vid_height) & 63) * 64
                     + ((x * (vid_square_pixels ? 240 : 200) / vid_height) & 63)];

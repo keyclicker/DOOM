@@ -8,6 +8,9 @@
 /* The world buffer and logical artwork use separate dimensions. */
 extern int vid_width, vid_height, vid_square_pixels;
 extern byte *vid_screen;
+#ifdef HARDWARE_RENDER
+extern byte *vid_alpha;
+#endif
 extern int v_ui_height;
 #define VID_WIDTH vid_width
 #define VID_HEIGHT vid_height

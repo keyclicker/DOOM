@@ -9,6 +9,10 @@ void R_Snapshot(void);
 void R_SnapObject(mobj_t *object);
 void R_InterpolateCamera(player_t *player);
 void R_SetFraction(int fraction);
+#ifdef HARDWARE_RENDER
+/* Smooth camera-only pitch alongside the original interpolated yaw. */
+float R_InterpolatePitch(float pitch);
+#endif
 
 /* Restore all interpolated inputs before the next simulation tic. */
 void R_RenderInterpolatedView(player_t *player);

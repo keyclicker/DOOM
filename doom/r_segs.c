@@ -35,6 +35,9 @@ rcsid[] = "$Id: r_segs.c,v 1.3 1997/01/29 20:10:19 b1 Exp $";
 
 #include "doomdef.h"
 #include "doomstat.h"
+#ifdef HARDWARE_RENDER
+#include "r_gpu.h"
+#endif
 
 #include "r_local.h"
 #ifdef VARIABLE_VIDEO
@@ -389,6 +392,12 @@ R_StoreWallRange
     fixed_t		vtop;
     int			lightnum;
 
+#ifdef HARDWARE_RENDER
+    if (r_mapping) {
+        curline->linedef->flags |= ML_MAPPED;
+        return;
+    }
+#endif
     // don't overflow and crash
     if (ds_p == &drawsegs[MAXDRAWSEGS])
 	return;		

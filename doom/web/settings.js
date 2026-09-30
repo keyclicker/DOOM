@@ -22,6 +22,8 @@ const Settings = {
       ? input.scale : 1,
       aspect: input?.aspect === 'browser' ? 'browser' : 'classic',
       unlocked: input?.unlocked === true, fps: input?.fps === true,
+      renderer: input?.renderer === true,
+      freelook: input?.renderer === true && input?.freelook === true,
       keys: [...this.defaults]};
     const keys = Array.isArray(input?.keys) ? input.keys.map(key =>
       typeof key === 'string' ? doomKey({code: key}) : key) : null;
@@ -55,7 +57,8 @@ const Settings = {
       : browser ? Math.round(height * innerWidth / innerHeight * 1.2 / 2) * 2
         : 320 * this.value.scale;
     // Bound storage while preserving aspect on displays beyond the engine limit.
-    const fit = Math.min(1, 8192 / width, 8192 / height,
+    const limit = Doom.hardware ? Math.min(8192, Doom.graphics.maxSize) : 8192;
+    const fit = Math.min(1, limit / width, limit / height,
       Math.sqrt(33554432 / (width * height)));
     width = Math.max(16, Math.floor(width * fit));
     height = Math.max(16, Math.floor(height * fit));
@@ -69,12 +72,26 @@ const Settings = {
     return true;
   },
 
+  /** Validate backend availability before enabling native geometry rendering. */
+  renderer() {
+    const failed = Doom.renderer(this.value.renderer);
+    this.value.renderer = !!Doom.hardware;
+    this.value.freelook = this.value.renderer && this.value.freelook;
+    if (this.activeRenderer !== this.value.renderer
+      || this.activeLook !== this.value.freelook || failed) {
+      Doom.engine._web_renderer(this.value.renderer, this.value.freelook, failed);
+      this.activeRenderer = this.value.renderer;
+      this.activeLook = this.value.freelook;
+    }
+  },
+
   /** Seed the native settings once the WAD and saved Doom defaults are loaded. */
   apply() {
     Doom.release();
     Doom.engine._web_settings(this.value.scale,
       this.value.aspect === 'browser', this.value.unlocked, this.value.fps);
     this.value.keys.forEach((key, index) => Doom.engine._web_bind(index, key));
+    this.renderer();
     this.video();
     this.frames = this.sampleTime = Doom.elapsed = 0;
     this.dirty = this.videoDirty = false;
@@ -90,8 +107,10 @@ const Settings = {
       this.value = {scale: e._web_setting(0),
         aspect: e._web_setting(1) ? 'browser' : 'classic',
         unlocked: !!e._web_setting(2), fps: !!e._web_setting(3),
+        renderer: !!e._web_setting(4), freelook: !!e._web_setting(5),
         keys: this.defaults.map((_, i) => e._web_binding(i))};
       Doom.release();
+      this.renderer();
       try { localStorage.setItem('doom:settings', JSON.stringify(this.value)); }
       catch (error) { console.warn('Could not save settings:', error); }
       this.frames = this.sampleTime = 0;

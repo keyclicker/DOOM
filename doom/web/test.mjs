@@ -2,6 +2,7 @@
 /** Exercise the built game in Chromium using only Node's standard library. */
 import assert from 'node:assert/strict';
 import {testSettings} from './test-settings.mjs';
+import {testRenderer} from './test-renderer.mjs';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
@@ -30,7 +31,7 @@ await new Promise(done => server.listen(0, '127.0.0.1', done));
 const url = `http://127.0.0.1:${server.address().port}/`;
 const profile = await mkdtemp(join(tmpdir(), 'doom-browser-'));
 const browser = spawn(process.env.CHROMIUM || 'chromium', [
-  '--headless', '--no-first-run', '--no-default-browser-check',
+  '--headless', '--enable-unsafe-swiftshader', '--no-first-run', '--no-default-browser-check',
   '--disable-dev-shm-usage', '--remote-debugging-port=0',
   '--autoplay-policy=no-user-gesture-required', `--user-data-dir=${profile}`, url,
 ], {stdio: 'ignore'});
@@ -102,6 +103,36 @@ try {
       Doom.suspended = true;
     })()`);
     assert(await evaluate('Doom.running'), await evaluate('Doom.message.textContent'));
+
+    if (process.env.DOOM_GPU_ONLY) {
+      await testRenderer(evaluate, send);
+      // Original recorded play exercises moving doors, lifts, monsters,
+      // muzzle flashes, switches and level/title transitions without cheats.
+      await send('Page.navigate', {url});
+      await until(() => evaluate('typeof Doom !== "undefined" && !Doom.engine'));
+      const demos = await evaluate(`(async () => {
+        const bytes = await (await fetch('/test.wad')).arrayBuffer();
+        await Doom.load(new File([bytes], 'test.wad'));
+        Doom.suspended = true;
+        Settings.value.renderer = true; Settings.value.freelook = true;
+        Settings.value.scale = 1; Settings.value.aspect = 'classic';
+        Settings.apply();
+        let frames = 0;
+        for (let i = 0; i < 6000; i++) {
+          Doom.engine._web_advance();
+          if (i % 8 === 0) {
+            Doom.engine._web_render(65536); Doom.draw();
+            if (Doom.engine._web_state() & 64) frames++;
+          }
+        }
+        const g = Doom.graphics;
+        return {frames, failed: !!g.failed, error: g.gl.getError(), pitch: g.pitch};
+      })()`);
+      assert(demos.frames > 200 && !demos.failed && !demos.error);
+      assert.equal(demos.pitch, 0, 'Free look affected demo playback');
+      console.log('PASS: GPU original demo loop', demos);
+      continue;
+    }
 
     // Measure the worklet's actual output, independently of sound effects.
     await evaluate(`(() => {
@@ -351,7 +382,8 @@ try {
   assert(requests.every(request => request.startsWith(url)
     || request.startsWith('blob:' + url)),
     'The game made an external network request');
-  console.log('PASS: gameplay, input, menus, sound, saves, reload, local assets');
+  console.log(process.env.DOOM_GPU_ONLY ? 'PASS: GPU rendering and local assets'
+    : 'PASS: gameplay, input, menus, sound, saves, reload, local assets');
 } finally {
   socket?.close();
   browser.kill();

@@ -5,6 +5,7 @@
 /* Settings are independent of the platform's current video dimensions. */
 int m_resolution = 1, m_aspect, m_unlocked, m_show_fps;
 int m_fps_value;
+int m_renderer, m_freelook, m_gpu_failed;
 
 /* Access the same action variables used by G_BuildTiccmd. */
 int *M_Binding(int action)

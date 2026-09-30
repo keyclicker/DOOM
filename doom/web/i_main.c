@@ -6,6 +6,8 @@
 #include "m_misc.h"
 #include "m_settings.h"
 #include "r_local.h"
+#include "r_gpu.h"
+#include "r_interp.h"
 #include <emscripten.h>
 
 /* Preserve the browser ABI while the engine owns simulation and rendering. */
@@ -31,9 +33,26 @@ EMSCRIPTEN_KEEPALIVE int web_setting(int index)
     case 1: return m_aspect;
     case 2: return m_unlocked;
     case 3: return m_show_fps;
+    case 4: return m_renderer;
+    case 5: return m_freelook;
     default: return 0;
     }
 }
+
+/* Change the backend only after the host has created its graphics context. */
+EMSCRIPTEN_KEEPALIVE void web_renderer(int enabled, int look, int failed)
+{
+    extern int screenblocks, detailLevel;
+    m_renderer = r_hardware = !!enabled;
+    m_freelook = enabled && look;
+    m_gpu_failed = failed;
+    r_pitch = 0;
+    R_ResetInterpolation();
+    R_SetViewSize(screenblocks, detailLevel);
+}
+
+/* Material IDs belong to the current graphics context, not the level. */
+EMSCRIPTEN_KEEPALIVE void web_reset_materials(void) { R_ResetMaterials(); }
 
 /* Update the presentation counter without advancing game time. */
 EMSCRIPTEN_KEEPALIVE void web_fps(int value) { m_fps_value = value; }

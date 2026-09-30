@@ -144,6 +144,50 @@ const Doom = {
     } catch (error) { this.fail(error); }
   },
 
+  /** Keep the software context intact when switching the visible canvas. */
+  renderer(enabled) {
+    this.softwareCanvas ??= this.canvas;
+    let failed = false;
+    if (this.graphics?.lost || this.graphics?.failed) {
+      if (this.hardware) {
+        enabled = false;
+        failed = true;
+      } else if (enabled) {
+        this.graphics.gl.getExtension('WEBGL_lose_context')?.loseContext();
+        this.graphics.canvas.remove();
+        this.graphics = null;
+      }
+    }
+    if (enabled && !this.graphics) {
+      const canvas = document.createElement('canvas');
+      try {
+        this.graphics = new DoomRenderer(canvas, this.engine);
+        this.engine._web_reset_materials();
+        canvas.onclick = () => this.capture();
+        this.loader.before(canvas);
+      } catch (error) {
+        console.warn('Using software rendering:', error);
+        canvas.getContext('webgl2')?.getExtension('WEBGL_lose_context')
+          ?.loseContext();
+        enabled = false;
+        failed = true;
+      }
+    }
+    const canvas = enabled ? this.graphics.canvas : this.softwareCanvas;
+    if (this.canvas !== canvas) {
+      if (document.pointerLockElement) document.exitPointerLock();
+      this.release();
+      this.canvas.hidden = true;
+      this.canvas.removeAttribute('id');
+      this.canvas = canvas;
+      canvas.id = 'screen';
+      canvas.hidden = false;
+      this.image = null;
+    }
+    this.hardware = enabled;
+    return failed;
+  },
+
   /** Reuse a view over WASM memory; rebuild it only after memory growth. */
   draw() {
     const buffer = this.engine.HEAPU8.buffer;
@@ -153,7 +197,15 @@ const Doom = {
         this.canvas.width, this.canvas.height);
     }
     // CSS displays the original non-square pixels at the CRT's 4:3 aspect.
-    this.context.putImageData(this.image, 0, 0);
+    if (this.hardware) {
+      try {
+        this.graphics.present(this.image.data, this.engine._web_world());
+      } catch (error) {
+        console.warn('Using software rendering:', error);
+        this.graphics.failed = true;
+        Settings.dirty = true;
+      }
+    } else this.context.putImageData(this.image, 0, 0);
   },
 
   /** Fullscreen and pointer lock require a click after loading. */
