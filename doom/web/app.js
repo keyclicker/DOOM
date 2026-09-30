@@ -145,12 +145,15 @@ const Doom = {
   },
 
   /** Keep the software context intact when switching the visible canvas. */
-  renderer(enabled) {
+  renderer(enabled, crt = false) {
     this.softwareCanvas ??= this.canvas;
     let failed = false;
+    this.crtFailed = false;
     if (this.graphics?.lost || this.graphics?.failed) {
       if (this.hardware) {
         enabled = false;
+        this.crtFailed = crt;
+        crt = false;
         failed = true;
       } else if (enabled) {
         this.graphics.gl.getExtension('WEBGL_lose_context')?.loseContext();
@@ -173,7 +176,44 @@ const Doom = {
         failed = true;
       }
     }
-    const canvas = enabled ? this.graphics.canvas : this.softwareCanvas;
+    if (crt && enabled) {
+      try {
+        this.graphics.crt ??= new DoomCRT(this.graphics.canvas, this.graphics.gl);
+      } catch (error) {
+        console.warn('Disabling CRT:', error);
+        crt = false;
+        this.crtFailed = true;
+      }
+    } else if (crt) {
+      if (this.crtDisplay?.lost || this.crtDisplay?.failed) {
+        if (this.crtEnabled && !this.hardware) {
+          crt = false;
+          this.crtFailed = true;
+        } else {
+          this.crtDisplay.gl.getExtension('WEBGL_lose_context')?.loseContext();
+          this.crtDisplay.canvas.remove();
+          this.crtDisplay = null;
+        }
+      }
+      if (crt && !this.crtDisplay) {
+        const canvas = document.createElement('canvas');
+        try {
+          this.crtDisplay = new DoomCRT(canvas);
+          canvas.onclick = () => this.capture();
+          this.loader.before(canvas);
+        } catch (error) {
+          console.warn('Disabling CRT:', error);
+          canvas.getContext('webgl2')?.getExtension('WEBGL_lose_context')
+            ?.loseContext();
+          crt = false;
+          this.crtFailed = true;
+        }
+      }
+    }
+    if (this.graphics) this.graphics.cleanCRT = crt && enabled;
+    this.crtEnabled = crt;
+    const canvas = enabled ? this.graphics.canvas
+      : crt ? this.crtDisplay.canvas : this.softwareCanvas;
     if (this.canvas !== canvas) {
       if (document.pointerLockElement) document.exitPointerLock();
       this.release();
@@ -193,8 +233,8 @@ const Doom = {
     const buffer = this.engine.HEAPU8.buffer;
     if (this.image?.data.buffer !== buffer) {
       this.image = new ImageData(new Uint8ClampedArray(buffer,
-        this.engine._web_pixels(), this.canvas.width * this.canvas.height * 4),
-        this.canvas.width, this.canvas.height);
+        this.engine._web_pixels(), this.width * this.height * 4),
+        this.width, this.height);
     }
     // CSS displays the original non-square pixels at the CRT's 4:3 aspect.
     if (this.hardware) {
@@ -203,6 +243,14 @@ const Doom = {
       } catch (error) {
         console.warn('Using software rendering:', error);
         this.graphics.failed = true;
+        Settings.dirty = true;
+      }
+    } else if (this.crtEnabled) {
+      try {
+        this.crtDisplay.software(this.image.data, this.width, this.height);
+      } catch (error) {
+        console.warn('Disabling CRT:', error);
+        this.crtDisplay.failed = true;
         Settings.dirty = true;
       }
     } else this.context.putImageData(this.image, 0, 0);

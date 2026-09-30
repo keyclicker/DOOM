@@ -23,6 +23,7 @@ const Settings = {
       aspect: input?.aspect === 'browser' ? 'browser' : 'classic',
       unlocked: input?.unlocked === true, fps: input?.fps === true,
       renderer: input?.renderer === true,
+      crt: input?.crt === true,
       freelook: input?.renderer === true && input?.freelook === true,
       keys: [...this.defaults]};
     const keys = Array.isArray(input?.keys) ? input.keys.map(key =>
@@ -57,24 +58,47 @@ const Settings = {
       : browser ? Math.round(height * innerWidth / innerHeight * 1.2 / 2) * 2
         : 320 * this.value.scale;
     // Bound storage while preserving aspect on displays beyond the engine limit.
-    const limit = Doom.hardware ? Math.min(8192, Doom.graphics.maxSize) : 8192;
+    const display = Doom.hardware ? Doom.graphics
+      : Doom.crtEnabled ? Doom.crtDisplay : null;
+    const limit = display ? Math.min(8192, display.maxSize) : 8192;
     const fit = Math.min(1, limit / width, limit / height,
       Math.sqrt(33554432 / (width * height)));
     width = Math.max(16, Math.floor(width * fit));
     height = Math.max(16, Math.floor(height * fit));
-    if (Doom.canvas.width === width && Doom.canvas.height === height
-      && this.native === native && Doom.image) return false;
-    Doom.engine._web_video(width, height, native);
-    this.native = native;
-    Doom.canvas.width = width;
-    Doom.canvas.height = height;
-    Doom.image = null;
-    return true;
+    const changed = Doom.width !== width || Doom.height !== height
+      || this.native !== native || !Doom.image;
+    if (changed) {
+      Doom.engine._web_video(width, height, native);
+      this.native = native;
+      Doom.width = width;
+      Doom.height = height;
+      Doom.image = null;
+    }
+    if (Doom.hardware) Doom.graphics.renderSize = [width, height];
+    let displayWidth = width, displayHeight = height;
+    if (Doom.crtEnabled) {
+      const bounds = Doom.canvas.getBoundingClientRect();
+      displayWidth = Math.max(1, Math.round(bounds.width * devicePixelRatio));
+      displayHeight = Math.max(1, Math.round(bounds.height * devicePixelRatio));
+      const displayFit = Math.min(1, limit / displayWidth, limit / displayHeight,
+        Math.sqrt(33554432 / (displayWidth * displayHeight)));
+      displayWidth = Math.max(1, Math.floor(displayWidth * displayFit));
+      displayHeight = Math.max(1, Math.floor(displayHeight * displayFit));
+    }
+    const resized = Doom.canvas.width !== displayWidth
+      || Doom.canvas.height !== displayHeight;
+    if (resized) {
+      Doom.canvas.width = displayWidth;
+      Doom.canvas.height = displayHeight;
+    }
+    return changed || resized;
   },
 
   /** Validate backend availability before enabling native geometry rendering. */
   renderer() {
-    const failed = Doom.renderer(this.value.renderer);
+    const failed = Doom.renderer(this.value.renderer, this.value.crt);
+    this.value.crt = !!Doom.crtEnabled;
+    Doom.engine._web_crt(this.value.crt, Doom.crtFailed);
     this.value.renderer = !!Doom.hardware;
     this.value.freelook = this.value.renderer && this.value.freelook;
     if (this.activeRenderer !== this.value.renderer
@@ -99,7 +123,8 @@ const Settings = {
 
   /** Never resize or reenter WASM from inside its native menu responder. */
   flush() {
-    if (this.value.scale === 0 && this.pixelRatio !== devicePixelRatio)
+    if ((this.value.scale === 0 || this.value.crt)
+      && this.pixelRatio !== devicePixelRatio)
       this.videoDirty = true;
     if (!this.dirty && !this.videoDirty) return false;
     if (this.dirty) {
@@ -108,6 +133,7 @@ const Settings = {
         aspect: e._web_setting(1) ? 'browser' : 'classic',
         unlocked: !!e._web_setting(2), fps: !!e._web_setting(3),
         renderer: !!e._web_setting(4), freelook: !!e._web_setting(5),
+        crt: !!e._web_setting(6),
         keys: this.defaults.map((_, i) => e._web_binding(i))};
       Doom.release();
       this.renderer();

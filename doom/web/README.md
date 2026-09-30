@@ -86,6 +86,10 @@ the status bar visible.
   auto-aim remains unchanged. Disabling WebGL disables free look and centers
   the camera. Pitch is capped at ±85 degrees, interpolated with unlocked FPS,
   and reset on level/load changes. Recorded demos retain their original view.
+  **Clean CRT** is off by default and works with either renderer. It softens
+  pixel transitions and adds gentle scanlines to the complete image, including
+  the HUD and menus. Output follows display density even at 320×200. The game
+  still renders at the selected resolution; native mode keeps its detail.
 - **Performance:** optional rendering at the display refresh rate, with
   interpolated camera, objects, moving floors/ceilings, and weapon motion.
   Simulation remains 35 Hz. Disabling it restores the original 35 FPS.
@@ -98,9 +102,53 @@ the status bar visible.
 
 These settings persist across WADs in local storage. Native saves remain
 compatible. Automap, menu art, intermissions, and melt transitions retain their
-original pixel detail. WebGL 2 is required only for the optional renderer;
+original pixel detail. WebGL 2 is required for WebGL rendering or Clean CRT;
 unavailable or lost contexts fall back to software without ending the game.
-You can select WebGL again to retry after context loss.
+You can select WebGL or Clean CRT again to retry after context loss.
+
+## Clean CRT
+
+`crt.js` contains an original, single-pass display filter. These established,
+human-authored shaders were the references, covering different CRT styles:
+
+| Shader / author | Style and useful ideas |
+| --- | --- |
+| [CRT-Lottes / Timothy Lottes](https://github.com/libretro/glsl-shaders/blob/master/crt/shaders/crt-lottes.glsl) | RGB arcade monitor; reconstruct neighboring samples in light space, with shaped beams and a shadow mask. |
+| [CRT-Pi / davej](https://github.com/libretro/glsl-shaders/blob/master/crt/shaders/crt-pi.glsl) | Lightweight CRT for small GPUs; horizontal blending, brightness-dependent beam width, and attention to scanline moiré. |
+| [CRT-Easymode / EasyMode](https://github.com/libretro/glsl-shaders/blob/master/crt/shaders/crt-easymode.glsl) | Flat aperture-grille look; separate horizontal/vertical sharpness and suppress scanlines on high-resolution input. |
+| [CRT-Royale / TroggleMonkey](https://docs.libretro.com/shader/crt_royale/) | Detailed multipass simulation with selectable phosphor masks, bloom, halation, convergence and screen geometry. |
+
+These are longstanding community choices, not a ranked benchmark. See the
+[Libretro shader guide](https://docs.libretro.com/shader/crt/) and the
+[community's favorite-shader discussion](https://forums.libretro.com/t/what-is-your-favorite-crt-shader/2426).
+Their source and documentation inform the design; none of their code, mask
+textures or presets is bundled here.
+
+Clean CRT prioritizes readable pixel art over reproducing every tube artifact:
+
+- A positive four-tap cubic B-spline blends each row horizontally without
+  ringing. Two rows blend with a smooth vertical transition, keeping lettering
+  and thin horizontal features clearer than an isotropic blur.
+- Colors are squared before blending and square-rooted afterward: a cheap
+  gamma-2 approximation to light-space reconstruction. Doom's palette, gamma
+  setting, flashes and power-up colors are applied before the filter.
+- Subtle scanline gaps narrow with brightness. Their contrast fades out between
+  3 and 1.5 output pixels per source row, avoiding unresolved patterns on native
+  and fractional scales. Black stays black; neutral colors stay neutral.
+  Uniform-field tests limit average brightness loss to 4%.
+- No curvature, vignette, phosphor mask, flicker, persistence, color fringing,
+  bloom buffers or time-dependent noise. Scanlines follow actual rendered rows,
+  rather than imposing a 200-line grid on native-resolution geometry.
+
+The pass uses eight texture fetches per output pixel. Hardware rendering
+passes its composed color texture directly; CRT replaces the final blit and
+adds no CPU readback, framebuffer upload or intermediate image. Software CRT
+allocates only a context, program and source texture, without the geometry
+renderer or its material atlas. Presentation uses the canvas's CSS size times
+`devicePixelRatio`, independently of the engine framebuffer. Turning it off
+restores the unfiltered path. Default software startup still creates no GL
+context. The cost scales with display pixels; physical GPU performance needs
+measurement on the target device, not the test VM's SwiftShader.
 
 ## Port boundary
 
@@ -135,7 +183,8 @@ You can select WebGL again to retry after context loss.
   scales and composites it, including status-bar gutters. Normal world frames
   never expand the HUD into a screen-sized CPU RGBA buffer.
   Fuzz uses a GPU scene copy only when needed. Wipes capture the last frame
-  once; normal gameplay performs no GPU readback.
+  once; normal gameplay performs no GPU readback. `crt.js` optionally filters
+  this composed texture during presentation.
 - `r_*.c` use bounded larger work arrays, 16-bit visplane row coordinates,
   variable column stride, and resolution-independent lighting. Low-detail
   routines draw pixel pairs without mutating the caller's column index or
@@ -199,10 +248,10 @@ Representative builds with Emscripten 6.0.9:
 
 | File | Raw | Gzip |
 | --- | ---: | ---: |
-| `index.html` | 113 KB | 32 KB |
-| `doom.wasm` | 319 KB | 150 KB |
+| `index.html` | 120 KB | 34 KB |
+| `doom.wasm` | 319 KB | 151 KB |
 | `music.wasm` | 26 KB | 10 KB |
-| Total | 458 KB | 192 KB |
+| Total | 465 KB | 194 KB |
 
 The build prints exact raw and gzip sizes; compressed sizes require HTTP
 compression by the hosting server. Music adds about 11 KB compressed,
@@ -258,7 +307,16 @@ node doom/web/test.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
 node doom/web/test-music.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
 DOOM_GPU_ONLY=1 node doom/web/test.mjs /path/to/doom1.wad \
   /path/to/doomu.wad /path/to/doom2.wad
+DOOM_CRT_ONLY=1 node doom/web/test.mjs /path/to/doom1.wad \
+  /path/to/doomu.wad /path/to/doom2.wad
 ```
+
+`test-crt.mjs` checks the shader with flat fields and hard edges: brightness,
+neutral colors, black level, monotonic transitions, temporal stability and
+texture orientation. It also checks native menu persistence, unchanged engine
+pixels, both renderers at fractional/Retina/4K sizes, context failure/recovery,
+and fixed-size artwork uploads. `DOOM_SCREENSHOTS=/tmp/doom-check` writes
+before/after screenshots and the native video menu during the CRT suite.
 
 Input regressions check all six Ctrl–Alt–Command press orders, movement
 while the chord is held, combined modifier releases, independent left/right

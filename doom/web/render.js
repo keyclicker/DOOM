@@ -1,5 +1,25 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
+/** Compile a WebGL 2 program; report driver errors to the caller. */
+function doomGLProgram(gl, vertex, fragment) {
+  const program = gl.createProgram();
+  for (const [type, text] of [[gl.VERTEX_SHADER, vertex],
+    [gl.FRAGMENT_SHADER, fragment]]) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, '#version 300 es\nprecision highp float;\n'
+      + 'precision highp int;\n' + text);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+      throw new Error(gl.getShaderInfoLog(shader));
+    gl.attachShader(program, shader);
+    gl.deleteShader(shader);
+  }
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS))
+    throw new Error(gl.getProgramInfoLog(program));
+  return program;
+}
+
 /** Real WebGL 2 geometry, indexed textures and Doom's palette lighting. */
 class DoomRenderer {
   constructor(canvas, engine) {
@@ -260,25 +280,9 @@ class DoomRenderer {
     return texture;
   }
 
-  /** Compile small, self-contained shaders; surface driver errors to fallback. */
+  /** Compile scene programs through the shared WebGL boundary. */
   program(vertex, fragment) {
-    const gl = this.gl;
-    const program = gl.createProgram();
-    for (const [type, text] of [[gl.VERTEX_SHADER, vertex],
-      [gl.FRAGMENT_SHADER, fragment]]) {
-      const shader = gl.createShader(type);
-      gl.shaderSource(shader, '#version 300 es\nprecision highp float;\n'
-        + 'precision highp int;\n' + text);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
-        throw new Error(gl.getShaderInfoLog(shader));
-      gl.attachShader(program, shader);
-      gl.deleteShader(shader);
-    }
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS))
-      throw new Error(gl.getProgramInfoLog(program));
-    return program;
+    return doomGLProgram(this.gl, vertex, fragment);
   }
 
   /** Cache uniform locations outside the hot rendering loop. */
@@ -320,7 +324,8 @@ class DoomRenderer {
   /** Keep an explicit framebuffer for depth and transition-only readback. */
   resize() {
     const gl = this.gl;
-    const {width, height} = this.canvas;
+    const [width, height] = this.renderSize
+      || [this.canvas.width, this.canvas.height];
     if (this.width === width && this.height === height) return;
     this.width = width;
     this.height = height;
@@ -493,10 +498,14 @@ class DoomRenderer {
         gl.RGBA, gl.UNSIGNED_BYTE, bytes);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.framebuffer);
-    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-    gl.blitFramebuffer(0, 0, this.width, this.height,
-      0, 0, this.width, this.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    if (this.cleanCRT) {
+      this.crt.present(this.color, this.width, this.height);
+    } else {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.framebuffer);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      gl.blitFramebuffer(0, 0, this.width, this.height,
+        0, 0, this.width, this.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    }
     this.presented = true;
     this.worldPresented = !!world;
   }

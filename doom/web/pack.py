@@ -13,7 +13,7 @@ def main():
     """Pack already-built modules; compilation belongs to the Makefile."""
     out = Path(sys.argv[1])
     html = (WEB / 'shell.html').read_text()
-    scripts = ['audio.js', 'render.js', 'app.js', 'settings.js']
+    scripts = ['audio.js', 'render.js', 'crt.js', 'app.js', 'settings.js']
     code = '\n'.join((WEB / name).read_text() for name in scripts)
     worklet = (WEB / 'music-worklet.js').read_text()
     code = code.replace('/* MUSIC_WORKLET */', json.dumps(worklet))
