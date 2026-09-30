@@ -2,7 +2,8 @@
 
 One engine derived from id Software's Linux Doom 1.10 release, with platform
 backends at the original `i_*` boundary. The browser port runs the original
-software renderer from a local IWAD, without runtime dependencies.
+software renderer by default, with optional WebGL geometry and free look.
+Game data comes from a local IWAD; there are no runtime dependencies.
 
 | Platform | Status | Build |
 | --- | --- | --- |
@@ -19,7 +20,7 @@ before trying the native target.
 doom/
   d_*.c/h, g_game.*    startup, frame stepping, gameplay
   p_*.c/h             world simulation
-  r_*.c/h             software renderer and interpolation
+  r_*.c/h             software/geometry renderers and interpolation
   v_*.c/h             indexed pixels and artwork composition
   m_*.c/h             menus, settings, bindings, utilities
   s_*.c/h             sound selection and OPL synthesis
@@ -43,11 +44,12 @@ The original module boundaries still apply:
 - `i_video.c`: input events, palette, and display output.
 - `i_sound.c`: sound/music delivery to the host.
 - `i_net.c`: transport, including the browser's single-player implementation.
+- `i_render.c` (optional): indexed materials and GPU triangle submission.
 
 Resolution and artwork composition live in `r_view`/`v_view`, interpolation
 in `r_interp`, frame stepping in `d_frame`, settings state in `m_settings`,
-and the MUS/OPL driver in `s_opl`. These modules contain no Emscripten or
-JavaScript calls. Browser exports are thin wrappers in `web/i_*.c`.
+the geometry renderer in `r_gpu`, and the MUS/OPL driver in `s_opl`. These
+modules contain no Emscripten or JavaScript calls. Browser exports are thin wrappers in `web/i_*.c`.
 The audio worklet has a separate `web/i_music.c` entry point so its synthesis
 can stay off the main thread.
 
@@ -68,6 +70,7 @@ The current build options preserve each backend's existing behavior:
 | --- | --- | --- |
 | `VARIABLE_VIDEO` | Variable framebuffer, wider raster storage, interpolation | Web |
 | `EXTENDED_MENU` | Resolution/FPS/binding pages and FPS counter | Web |
+| `HARDWARE_RENDER` | Optional geometry renderer and camera pitch | Web |
 | `EXTERNAL_LOOP` | Return to the host and advance through `D_AdvanceFrame`/`D_RenderFrame` | Web |
 | `SNDSERV` | Original external Unix sound server | Linux |
 
@@ -77,6 +80,11 @@ modules. A backend enabling them must link `m_settings`, `d_frame`, `r_view`,
 engine calls and implement `I_SettingsChanged`. Web's build fragment is the
 working example. Linux retains its blocking loop, fixed renderer, and original
 menus; new browser features are not silently enabled there.
+
+A GPU backend additionally compiles `r_gpu` with `HARDWARE_RENDER` and
+implements `i_render.h`. The engine owns BSP polygons, wall pegging, sprite
+selection and interpolated positions. The backend owns textures, shaders and
+submission. Web's implementation uses WebGL 2 directly, without a GL shim.
 
 Both current targets retain a 32-bit engine ABI. A new 64-bit native target
 will need an explicit portability pass over pointer arithmetic and save data.

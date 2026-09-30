@@ -43,6 +43,10 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 
 #include "doomdef.h"
 #include "doomstat.h"
+#ifdef HARDWARE_RENDER
+#include "r_gpu.h"
+#include "i_render.h"
+#endif
 
 #include "dstrings.h"
 #include "sounds.h"
@@ -233,11 +237,23 @@ void D_Display (void)
     if (gamestate != wipegamestate)
     {
 	wipe = true;
+#ifdef HARDWARE_RENDER
+        if (r_hardware) I_RenderCapture(screens[0]);
+#endif
 	wipe_StartScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
     }
     else
 	wipe = false;
 
+#ifdef HARDWARE_RENDER
+    r_hardware_frame = r_hardware && !wipe && gamestate == GS_LEVEL
+        && !automapactive && gametic;
+    if (r_hardware_frame) {
+        memset(vid_alpha, 0, vid_width * vid_height);
+        redrawsbar = true;
+        borderdrawcount = 3;
+    }
+#endif
     if (gamestate == GS_LEVEL && gametic)
     {
 #ifdef EXTENDED_MENU

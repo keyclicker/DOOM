@@ -847,3 +847,40 @@ void R_PrecacheLevel (void)
 
 
 
+
+#ifdef HARDWARE_RENDER
+/* Compose RG index/coverage texels without relying on opaque column caches. */
+byte *R_TexturePixels(int number, int *width, int *height)
+{
+    texture_t *texture = textures[number];
+    texpatch_t *part;
+    patch_t *patch;
+    column_t *post;
+    byte *data;
+    int p, x, y, i, dx, dy;
+    *width = texture->width;
+    *height = texture->height;
+    data = calloc(*width * *height, 2);
+    if (!data) I_Error("GPU texture allocation");
+    for (p = 0; p < texture->patchcount; p++) {
+        part = &texture->patches[p];
+        patch = W_CacheLumpNum(part->patch, PU_CACHE);
+        for (x = 0; x < SHORT(patch->width); x++) {
+            dx = part->originx + x;
+            if (dx < 0 || dx >= *width) continue;
+            post = (column_t *)((byte *)patch + LONG(patch->columnofs[x]));
+            while (post->topdelta != 255) {
+                for (i = 0; i < post->length; i++) {
+                    dy = part->originy + post->topdelta + i;
+                    if (dy < 0 || dy >= *height) continue;
+                    y = (dy * *width + dx) * 2;
+                    data[y] = ((byte *)post)[i + 3];
+                    data[y + 1] = 255;
+                }
+                post = (column_t *)((byte *)post + post->length + 4);
+            }
+        }
+    }
+    return data;
+}
+#endif

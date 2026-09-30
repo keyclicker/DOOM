@@ -38,6 +38,11 @@ R_GetColumn
   int		col );
 
 
+#ifdef HARDWARE_RENDER
+/* Return malloc-owned index/coverage texels for a composite wall texture. */
+byte *R_TexturePixels(int number, int *width, int *height);
+#endif
+
 // I/O, setting up the stuff.
 void R_InitData (void);
 void R_PrecacheLevel (void);

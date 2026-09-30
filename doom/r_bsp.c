@@ -38,6 +38,9 @@ rcsid[] = "$Id: r_bsp.c,v 1.4 1997/02/03 22:45:12 b1 Exp $";
 
 // State.
 #include "doomstat.h"
+#ifdef HARDWARE_RENDER
+#include "r_gpu.h"
+#endif
 #include "r_state.h"
 
 //#include "r_local.h"
@@ -513,6 +516,12 @@ void R_Subsector (int num)
     count = sub->numlines;
     line = &segs[sub->firstline];
 
+#ifdef HARDWARE_RENDER
+    if (r_mapping) {
+        while (count--) R_AddLine(line++);
+        return;
+    }
+#endif
     if (frontsector->floorheight < viewz)
     {
 	floorplane = R_FindPlane (frontsector->floorheight,

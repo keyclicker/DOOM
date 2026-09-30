@@ -1,6 +1,8 @@
 # Browser backend: supported. See README.md for build and test commands.
 CC := $(EMCC)
-COMMON += d_frame.c m_settings.c r_view.c r_interp.c v_view.c
+COMMON += d_frame.c m_settings.c r_view.c r_interp.c v_view.c r_gpu.c
+BACKEND += web/i_render.c
+CPPFLAGS += -DHARDWARE_RENDER
 CPPFLAGS += -DNORMALUNIX -DVARIABLE_VIDEO -DEXTENDED_MENU -DEXTERNAL_LOOP
 CFLAGS += $(OPT) -flto -Wno-error=implicit-function-declaration \
     -Wno-error=incompatible-pointer-types
@@ -25,7 +27,7 @@ $(O)/music.wasm: $(MUSIC_OBJECTS)
 	    -sFILESYSTEM=0 -sINITIAL_MEMORY=1048576 -sSTACK_SIZE=65536 -o $@
 
 $(O)/index.html: $(O)/doom.js $(O)/doom.wasm $(O)/music.wasm \
-    web/pack.py web/shell.html web/app.js web/audio.js web/settings.js \
+    web/pack.py web/shell.html web/app.js web/audio.js web/settings.js web/render.js \
     web/music-worklet.js
 	$(PYTHON) web/pack.py $(O)
 

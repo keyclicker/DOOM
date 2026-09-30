@@ -3,6 +3,9 @@
 #include "doomstat.h"
 #include "r_view.h"
 #include "r_interp.h"
+#ifdef HARDWARE_RENDER
+#include "r_gpu.h"
+#endif
 #include "v_view.h"
 
 /* Cache world coordinates while legacy UI code sees its original space. */
@@ -86,6 +89,9 @@ void R_RenderView(player_t *player)
     viewwindowy = render_y;
     R_RenderInterpolatedView(player);
     R_SaveView();
+#ifdef HARDWARE_RENDER
+    if (r_hardware_frame) return;
+#endif
     /* Preserve a logical view for wipes and the original background eraser. */
     if (vid_width != 320 || vid_height != 200 || vid_square_pixels) {
         for (y = 0; y < logical_height; y++)

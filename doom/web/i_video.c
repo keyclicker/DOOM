@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include <string.h>
 #include "doomstat.h"
+#ifdef HARDWARE_RENDER
+#include "r_gpu.h"
+#endif
 #include "d_main.h"
 #include "d_frame.h"
 #include "i_video.h"
@@ -38,6 +41,13 @@ EMSCRIPTEN_KEEPALIVE void web_mouse(int buttons, int x, int y)
 /* Expose the packed RGBA framebuffer without copying it across the ABI. */
 EMSCRIPTEN_KEEPALIVE unsigned int *web_pixels(void) { return web_rgba; }
 
+/* Supply the exact current palette, including gamma, damage and pickups. */
+EMSCRIPTEN_KEEPALIVE unsigned int *web_palette(void) { return colors; }
+EMSCRIPTEN_KEEPALIVE int web_world(void)
+{
+    return r_hardware_frame && !d_wiping;
+}
+
 /* Browser video needs no OS resources. */
 void I_InitGraphics(void) {}
 void I_ShutdownGraphics(void) {}
@@ -68,6 +78,15 @@ void I_FinishUpdate(void)
             V_BlitView();
         source = vid_screen;
     }
+#ifdef HARDWARE_RENDER
+    if (r_hardware_frame && !d_wiping) {
+        source = vid_screen;
+        for (i = 0; i < vid_width * vid_height; i++)
+            web_rgba[i] = (colors[source[i]] & 0xffffffu)
+                | ((unsigned int)vid_alpha[i] << 24);
+        return;
+    }
+#endif
     for (i = 0; i < vid_width * vid_height; i++)
         web_rgba[i] = colors[source[i]];
 }

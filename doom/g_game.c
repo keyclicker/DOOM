@@ -29,6 +29,9 @@ rcsid[] = "$Id: g_game.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 
 #include "doomdef.h" 
 #include "doomstat.h"
+#ifdef HARDWARE_RENDER
+#include "r_gpu.h"
+#endif
 
 #include "z_zone.h"
 #include "f_finale.h"
@@ -577,7 +580,10 @@ boolean G_Responder (event_t* ev)
 	mousebuttons[1] = ev->data1 & 2; 
 	mousebuttons[2] = ev->data1 & 4; 
 	mousex = ev->data2*(mouseSensitivity+5)/10; 
-	mousey = ev->data3*(mouseSensitivity+5)/10; 
+	mousey = ev->data3*(mouseSensitivity+5)/10;
+#ifdef HARDWARE_RENDER
+        if (R_MouseLook(mousey)) mousey = 0;
+#endif
 	return true;    // eat events 
  
       case ev_joystick: 

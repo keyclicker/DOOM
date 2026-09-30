@@ -1410,10 +1410,14 @@ static menu_t SettingsMenu = {
     4, &OptionsDef, SettingsItems, M_SettingsDraw, 54, 64, 0
 };
 static menuitem_t SettingsVideoItems[] = {
-    {2, "", M_SettingsVideo, 'r'}, {2, "", M_SettingsVideo, 'a'}
+    {2, "", M_SettingsVideo, 'r'}, {2, "", M_SettingsVideo, 'a'},
+#ifdef HARDWARE_RENDER
+    {2, "", M_SettingsVideo, 'e'}, {2, "", M_SettingsVideo, 'f'}
+#endif
 };
 static menu_t SettingsVideoMenu = {
-    2, &SettingsMenu, SettingsVideoItems, M_SettingsDraw, 54, 64, 0
+    sizeof(SettingsVideoItems) / sizeof(*SettingsVideoItems),
+    &SettingsMenu, SettingsVideoItems, M_SettingsDraw, 54, 64, 0
 };
 static menuitem_t SettingsPerformanceItems[] = {
     {2, "", M_SettingsPerformance, 'u'}, {2, "", M_SettingsPerformance, 'f'}
@@ -1518,7 +1522,7 @@ static void M_SettingsDraw(void)
     static char *resolutions[] = {"NATIVE", "320X200", "640X400", "960X600",
         "1280X800", "1600X1000", "1920X1200"};
     static char *presets[] = {"ORIGINAL", "WASD", "CUSTOM"};
-    static char *video[] = {"RESOLUTION", "ASPECT RATIO"};
+    static char *video[] = {"RESOLUTION", "ASPECT RATIO", "RENDERER", "FREE LOOK"};
     static char *performance[] = {"UNLOCK FPS", "FPS COUNTER"};
     static char *keyboard[] = {"MOVEMENT", "ACTIONS", "PRESET"};
     char dimensions[32];
@@ -1532,11 +1536,20 @@ static void M_SettingsDraw(void)
         for (i = 0; i < 4; i++) M_SettingsRow(i, root[i], NULL);
     } else if (currentMenu == &SettingsVideoMenu) {
         title = "VIDEO";
-        M_SettingsLayout(video, 2, "1920X1200");
+        M_SettingsLayout(video, currentMenu->numitems, "1920X1200");
         M_SettingsRow(0, video[0], resolutions[m_resolution]);
         M_SettingsRow(1, video[1], m_aspect ? "BROWSER" : "4:3");
+#ifdef HARDWARE_RENDER
+        M_SettingsRow(2, video[2], m_renderer ? "WEBGL" : "SOFTWARE");
+        M_SettingsRow(3, video[3], !m_renderer ? "N/A"
+            : m_freelook ? "ON" : "OFF");
+#endif
         sprintf(dimensions, "%d X %d", vid_width, vid_height);
-        M_WriteText((320 - M_StringWidth(dimensions)) / 2, 128, dimensions);
+        M_WriteText((320 - M_StringWidth(dimensions)) / 2, 136, dimensions);
+        if (m_gpu_failed) {
+            strcpy(dimensions, "WEBGL UNAVAILABLE");
+            M_WriteText((320 - M_StringWidth(dimensions)) / 2, 146, dimensions);
+        }
         hint = "LEFT/RIGHT: CHANGE  ESC: BACK";
     } else if (currentMenu == &SettingsPerformanceMenu) {
         title = "PERFORMANCE";
@@ -1586,7 +1599,11 @@ static void M_SettingsVideo(int choice)
 {
     if (itemOn == 0)
         m_resolution = (m_resolution + (choice ? 1 : 6)) % 7;
-    else m_aspect = !m_aspect;
+    else if (itemOn == 1) m_aspect = !m_aspect;
+    else if (itemOn == 2) {
+        m_renderer = !m_renderer;
+        if (!m_renderer) m_freelook = 0;
+    } else if (m_renderer) m_freelook = !m_freelook;
     I_SettingsChanged();
 }
 
@@ -1653,6 +1670,7 @@ static void M_SettingsReset(int choice)
     int i;
     m_resolution = 1;
     m_aspect = m_unlocked = m_show_fps = 0;
+    m_renderer = m_freelook = m_gpu_failed = 0;
     for (i = 0; i < 10; i++) *M_Binding(i) = settings_presets[0][i];
     screenblocks = 10;
     screenSize = 7;

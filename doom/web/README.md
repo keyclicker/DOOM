@@ -69,7 +69,7 @@ Options and settings use a compact font and cursor, with sliders and values
 aligned beside their labels. The default view fills the screen while keeping
 the status bar visible.
 
-- **Video:** actual software rendering at 320×200, 640×400, 960×600, or
+- **Video:** render resolution at 320×200, 640×400, 960×600, or
   1280×800, 1600×1000, or 1920×1200. **Native** follows the displayed canvas's
   size multiplied by `devicePixelRatio`, including Retina screens and changes
   in browser zoom or display density. Native buffers use square pixels;
@@ -78,7 +78,14 @@ the status bar visible.
   width to the window, expanding the horizontal field of view on wide
   displays. HUD/menu artwork stays proportional, with the original backdrop
   tiled beside the status bar. Buffers are bounded to 8192 pixels per side
-  and 32 Mi pixels total; larger displays scale down proportionally.
+  and 32 Mi pixels total; larger displays scale down proportionally. WebGL
+  also respects the device's texture/renderbuffer dimension limit.
+  **Renderer** selects **Software** (default) or **WebGL**. **Free look** is
+  off by default and available only with WebGL: mouse Y pitches the camera
+  instead of moving the player. Mouse X still turns, and Doom's original
+  auto-aim remains unchanged. Disabling WebGL disables free look and centers
+  the camera. Pitch is capped at ±85 degrees, interpolated with unlocked FPS,
+  and reset on level/load changes. Recorded demos retain their original view.
 - **Performance:** optional rendering at the display refresh rate, with
   interpolated camera, objects, moving floors/ceilings, and weapon motion.
   Simulation remains 35 Hz. Disabling it restores the original 35 FPS.
@@ -86,13 +93,14 @@ the status bar visible.
 - **Keyboard:** edit movement, turning, strafing, fire, use, and run bindings.
   Original and WASD presets are available. Duplicate assignments are rejected;
   left/right modifiers share one action. Menu/function keys, weapon numbers,
-  automap, view-size controls, and pause retain their original shortcuts. Mouse controls remain
-  unchanged.
+  automap, view-size controls, and pause retain their original shortcuts.
+  Mouse controls retain their original behavior unless free look is enabled.
 
 These settings persist across WADs in local storage. Native saves remain
 compatible. Automap, menu art, intermissions, and melt transitions retain their
-original pixel detail. Software limits still apply; hardware rendering and
-free look remain separate future work.
+original pixel detail. WebGL 2 is required only for the optional renderer;
+unavailable or lost contexts fall back to software without ending the game.
+You can select WebGL again to retry after context loss.
 
 ## Port boundary
 
@@ -108,6 +116,18 @@ free look remain separate future work.
   They cache projection tables per video/view change and mirror UI writes
   without losing patch transparency. `r_interp.c` keeps snapshots outside serialized
   game structures. Render inputs are restored before the next simulation tic.
+- `r_gpu.c` builds convex floor/ceiling polygons by clipping map bounds through
+  the existing BSP and subsector segs. It streams visible wall/plane/sprite
+  triangles with current sector heights, texture animations and lighting.
+  Materials are uploaded once per context as palette indices plus coverage.
+  Frustum rejection works at arbitrary pitch; BSP ordering reduces overdraw.
+  A visibility-only pass retains the original automap discovery rules.
+- `web/i_render.c` implements `i_render.h`; `render.js` submits triangles
+  directly to WebGL 2. Indexed texture and COLORMAP lookups retain the WAD's
+  palette, gamma, damage flashes and power-up colors. The native status bar,
+  menus and text composite over the world with explicit alpha coverage.
+  Fuzz uses a GPU scene copy only when needed. Wipes capture the last frame
+  once; normal gameplay performs no GPU readback.
 - `r_*.c` use bounded larger work arrays, 16-bit visplane row coordinates,
   variable column stride, and resolution-independent lighting. Low-detail
   routines draw pixel pairs without mutating the caller's column index or
@@ -151,7 +171,11 @@ synthesis fidelity, not SDL callback rounding or hardware analog output.
 The browser still resets the chip for each new song and silences it on stop
 or non-looping completion. Only MUS music and Doom 1.9 OPL behavior are
 supported; older DMX versions and optional OPL3 stereo are outside this port.
-Network multiplayer, hardware rendering, and free look are not implemented.
+Network multiplayer is not implemented. WebGL uses perspective triangles
+and depth testing, so its pixels are not identical to the software renderer.
+Its distance shading and fuzz approximate the original effects. Beyond the
+original sky artwork, the sky fades into averaged edge colors at the poles. F5's low-detail
+pixel pairs affect only the software renderer.
 World coordinates and map formats retain their original limits. Renderer
 storage has bounded headroom for wider views; allocation checks precede writes.
 
@@ -167,10 +191,10 @@ Representative builds with Emscripten 6.0.9:
 
 | File | Raw | Gzip |
 | --- | ---: | ---: |
-| `index.html` | 85 KB | 25 KB |
-| `doom.wasm` | 305 KB | 143 KB |
+| `index.html` | 106 KB | 31 KB |
+| `doom.wasm` | 319 KB | 150 KB |
 | `music.wasm` | 26 KB | 10 KB |
-| Total | 416 KB | 177 KB |
+| Total | 451 KB | 190 KB |
 
 The build prints exact raw and gzip sizes; compressed sizes require HTTP
 compression by the hosting server. Music adds about 11 KB compressed,
@@ -188,8 +212,15 @@ WASM memory starts at 32 MiB and can grow to 512 MiB. The tested games remained
 at 32 MiB with default settings. Switching through higher resolutions and
 widescreen modes grows memory as needed. Canvas views are reused until the
 resolution or WASM memory changes; sample buffers are
-decoded once. GPU usage is limited to whatever the browser uses to display
-Canvas 2D; there is no hardware level renderer.
+decoded once. Software startup creates no WebGL context. Enabling WebGL
+allocates a bounded RG8 material atlas (up to 32 MiB), a reusable vertex
+buffer, and color/depth/UI targets at the selected resolution. Materials and
+buffers are reused across frames and renderer toggles. The GPU handles the
+level geometry; the engine still runs gameplay and native UI drawing.
+
+The GPU regression suite uses Chromium/SwiftShader on the test VM. It checks
+WebGL correctness, including 4K and Retina modes, but does not measure physical
+GPU performance. Hardware timings depend on the browser and device.
 
 At 1280×800, sampled scenes took about 7–8 ms per software frame plus Canvas
 submission on the same VM, versus 0.3–0.7 ms at 320×200. These measurements exclude
@@ -205,6 +236,8 @@ packages. Game data is supplied by the caller and never committed.
 ```sh
 node doom/web/test.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
 node doom/web/test-music.mjs /path/to/doom1.wad /path/to/doomu.wad /path/to/doom2.wad
+DOOM_GPU_ONLY=1 node doom/web/test.mjs /path/to/doom1.wad \
+  /path/to/doomu.wad /path/to/doom2.wad
 ```
 
 Input regressions check all six Ctrl–Alt–Command press orders, movement
@@ -222,6 +255,14 @@ A simulated 100 Hz display verifies the same game-tic count in capped and
 unlocked modes, while only unlocked presentation reaches 100 Hz. All 77 maps
 are exercised at 1706×800. Set `DOOM_SCREENSHOTS=/tmp/doom-check` to write UI
 and gameplay screenshots during the test.
+
+`test-renderer.mjs` checks the opt-in menu, camera-only pitch, interpolation,
+exact status-bar colors/coverage, software round trips, automap, four headings
+and extreme pitch on all 77 maps, native/Retina modes through 4K, every view
+size, unavailable-WebGL fallback, and context loss/recovery. Original demos also run through WebGL to
+exercise moving sectors, combat and transitions. Chromium's explicit
+SwiftShader flag is for testing only; the shipped page uses the browser's
+normal WebGL device selection.
 
 Tests start a game through its menus, move, fire, use the automap, pause,
 save/load, reload the page and restore saves, then warp to and save every map.
