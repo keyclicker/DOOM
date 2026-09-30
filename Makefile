@@ -4,6 +4,11 @@ O := build
 PYTHON ?= python3
 EMCC ?= emcc
 OPT ?= -Oz
+DOOM1_WAD ?= $(O)/wads/DOOM.WAD
+DOOM2_WAD ?= $(O)/wads/DOOM2.WAD
+HTML := doom-engine.html doom.html doom1.html doom2.html
+PACK_SOURCES := tools/pack_single.py tools/pack.py tools/pack_shaders.py \
+ web/unpack.js lib/xz-decompress/xz-decompress.min.js lib/xz-decompress/LICENSE
 
 SOURCES := doomdef.c doomstat.c dstrings.c tables.c \
  f_finale.c f_wipe.c d_main.c d_net.c d_items.c d_frame.c g_game.c \
@@ -33,8 +38,11 @@ OBJECTS := $(addprefix $(O)/doom/,$(SOURCES:.c=.o))
 MUSIC_OBJECTS := $(addprefix $(O)/,doom/s_opl.o doom/i_music.o \
  lib/nuked-opl3/opl3.o)
 
-.PHONY: all clean single single-wad
-all: $(O)/index.html
+.PHONY: all preview clean $(HTML)
+all: doom-engine.html
+preview: $(HTML)
+
+$(HTML): %: $(O)/% $(O)/%.gz
 
 $(O)/%.o: %.c Makefile
 	mkdir -p $(@D)
@@ -55,15 +63,30 @@ $(O)/index.html: $(O)/doom.js $(O)/doom.wasm $(O)/music.wasm \
  web/crt.js web/crt-presets.js $(wildcard shaders/*/*)
 	$(PYTHON) tools/pack.py $(O)
 
-single: $(O)/index.html
-	$(PYTHON) tools/pack_single.py $(O)
+$(O)/doom-engine.html $(O)/doom-engine.html.gz &: $(O)/index.html $(PACK_SOURCES)
+	$(PYTHON) tools/pack_single.py $(O) --output $(O)/doom-engine.html
 
-single-wad: $(O)/index.html
-	@test -n "$(WAD)" || { \
-	  echo 'Usage: make single-wad WAD=/path/to/DOOM.WAD'; exit 1; }
-	$(PYTHON) tools/pack_single.py $(O) --wad "$(WAD)"
+$(O)/doom1.html $(O)/doom1.html.gz &: $(O)/index.html $(PACK_SOURCES) $(DOOM1_WAD)
+	$(PYTHON) tools/pack_single.py $(O) --output $(O)/doom1.html \
+	  --wad "$(DOOM1_WAD)"
 
+$(O)/doom2.html $(O)/doom2.html.gz &: $(O)/index.html $(PACK_SOURCES) $(DOOM2_WAD)
+	$(PYTHON) tools/pack_single.py $(O) --output $(O)/doom2.html \
+	  --wad "$(DOOM2_WAD)"
+
+$(O)/doom.html $(O)/doom.html.gz &: $(O)/index.html $(PACK_SOURCES) \
+ $(DOOM1_WAD) $(DOOM2_WAD)
+	$(PYTHON) tools/pack_single.py $(O) --output $(O)/doom.html \
+	  --wad "$(DOOM1_WAD)" --wad "$(DOOM2_WAD)"
+
+$(DOOM1_WAD) $(DOOM2_WAD):
+	@echo 'Missing $@. Supply your local IWAD before building previews.'
+	@exit 1
+
+# Keep private input WADs and any unrelated local files in build/.
 clean:
-	rm -rf $(O)
+	rm -rf $(O)/doom $(O)/lib
+	rm -f $(addprefix $(O)/,doom.js doom.wasm music.wasm index.html \
+	  $(HTML) $(HTML:=.gz))
 
 -include $(OBJECTS:.o=.d) $(MUSIC_OBJECTS:.o=.d)

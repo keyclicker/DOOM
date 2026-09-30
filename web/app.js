@@ -82,8 +82,11 @@ const Doom = {
     if (this.running || this.loading || !file) return;
     this.loading = true;
     try {
-      document.documentElement.requestFullscreen?.().catch(console.warn);
-      await this.audio.resume();
+      if (navigator.userActivation?.isActive) {
+        document.documentElement.requestFullscreen?.().catch(console.warn);
+      }
+      // Autoplay restrictions must not hold game startup behind audio.resume().
+      this.audio.resume().catch(console.warn);
       this.message.textContent = 'Loading…';
       await this.audio.initMusic();
       await DoomRetroCRT.init();
@@ -106,6 +109,8 @@ const Doom = {
       Settings.apply();
       this.running = true;
       delete globalThis.doomBundle;
+      this.loader.querySelectorAll('[data-game]')
+        .forEach(button => button.remove());
       this.loader.hidden = true;
       this.lastFrame = performance.now();
       requestAnimationFrame(time => this.frame(time));
@@ -301,7 +306,8 @@ const Doom = {
     if (document.fullscreenElement) document.exitFullscreen();
     this.loader.hidden = false;
     this.message.textContent = 'Game closed. Reload to play again.';
-    document.querySelector('#choose').hidden = true;
+    this.loader.querySelectorAll('button')
+      .forEach(button => button.hidden = true);
   },
 
   /** Display a recoverable load error without adding game chrome. */
@@ -349,18 +355,30 @@ function syncModifiers(event) {
   }
 }
 
-document.querySelector('#choose').onclick = () => {
-  if (globalThis.doomBundle?.wad) {
-    Doom.load(globalThis.doomBundle.wad);
+/** Offer a picker or collection; start a sole embedded IWAD automatically. */
+function setupLoader() {
+  const choose = document.querySelector('#choose');
+  choose.onclick = () => {
+    Doom.audio.resume().catch(console.warn);
+    document.querySelector('#file').click();
+  };
+  const games = globalThis.doomBundle?.wads || [];
+  if (!games.length) return;
+  choose.hidden = true;
+  Doom.message.textContent = games.length === 1 ? 'Loading…' : 'Choose a game';
+  if (games.length === 1) {
+    queueMicrotask(() => Doom.load(games[0].file));
     return;
   }
-  Doom.audio.resume().catch(console.warn);
-  document.querySelector('#file').click();
-};
-if (globalThis.doomBundle?.wad) {
-  document.querySelector('#choose').textContent = 'Play DOOM';
-  Doom.message.textContent = 'Click to start';
+  for (const [index, game] of games.entries()) {
+    const button = document.createElement('button');
+    button.dataset.game = index;
+    button.textContent = game.title;
+    button.onclick = () => Doom.load(game.file);
+    Doom.message.before(button);
+  }
 }
+setupLoader();
 document.querySelector('#file').onchange = event => Doom.load(event.target.files[0]);
 document.ondragover = event => event.preventDefault();
 document.ondrop = event => {
@@ -371,6 +389,9 @@ Doom.canvas.onclick = () => Doom.capture();
 document.oncontextmenu = event => event.preventDefault();
 document.onkeydown = event => {
   if (!Doom.running) return;
+  if (Doom.audio.context?.state === 'suspended') {
+    Doom.audio.resume().catch(console.warn);
+  }
   syncModifiers(event);
   // Keep Command shortcuts, but allow movement with a Ctrl–Alt–Command chord.
   if (event.metaKey && !(event.ctrlKey && event.altKey)) return;

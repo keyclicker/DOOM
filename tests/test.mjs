@@ -38,7 +38,9 @@ const profile = await mkdtemp(join(tmpdir(), 'doom-browser-'));
 const browser = spawn(process.env.CHROMIUM || 'chromium', [
   '--headless', '--enable-unsafe-swiftshader', '--no-first-run', '--no-default-browser-check',
   '--disable-dev-shm-usage', '--remote-debugging-port=0',
-  '--autoplay-policy=no-user-gesture-required', `--user-data-dir=${profile}`, url,
+  '--autoplay-policy=' + (process.env.DOOM_AUTOPLAY_BLOCKED
+    ? 'document-user-activation-required' : 'no-user-gesture-required'),
+  `--user-data-dir=${profile}`, url,
 ], {stdio: 'ignore'});
 let socket;
 
@@ -96,11 +98,39 @@ try {
     return result.result.value;
   }
 
-  /** Exercise the real picker or embedded-WAD button, including file://. */
+  /** Wait for a new document, including automatically starting bundles. */
+  async function navigate() {
+    await evaluate('globalThis.previousDoomPage = true');
+    await send('Page.navigate', {url});
+    await until(() => evaluate(
+      'typeof Doom !== "undefined" && !globalThis.previousDoomPage'));
+  }
+
+  let checkedAutoplay = false;
+
+  /** Exercise the picker, collection buttons, or an automatic file:// start. */
   async function loadWad() {
-    if (await evaluate('!!globalThis.doomBundle?.wad')) {
+    const hash = createHash('sha256').update(await readFile(wadPath)).digest('hex');
+    const automatic = await evaluate('Doom.loading || Doom.running');
+    if (automatic) {
+      assert(await evaluate('document.querySelector("#choose").hidden'),
+        'Single-game bundle unexpectedly requires a picker');
+    } else if (await evaluate('!!document.querySelector("[data-game]")')) {
+      assert.equal(await evaluate('Doom.running'), false,
+        'Collection started before choosing a game');
+      const index = await evaluate(`(async () => {
+        for (const [i, game] of globalThis.doomBundle.wads.entries()) {
+          const hash = await crypto.subtle.digest('SHA-256',
+            await game.file.arrayBuffer());
+          const hex = Array.from(new Uint8Array(hash),
+            b => b.toString(16).padStart(2, '0')).join('');
+          if (hex === '${hash}') return i;
+        }
+        return -1;
+      })()`);
+      assert(index >= 0, 'Test WAD is missing from the collection');
       await send('Runtime.evaluate', {
-        expression: 'document.querySelector("#choose").click()',
+        expression: `document.querySelector('[data-game="${index}"]').click()`,
         userGesture: true,
       });
     } else {
@@ -114,15 +144,28 @@ try {
       throw Error(error.message + ': ' + await evaluate('Doom.message.textContent'));
     });
     await evaluate('Doom.suspended = true');
-    const hash = createHash('sha256').update(await readFile(wadPath)).digest('hex');
     assert.equal(await evaluate('Doom.storageKey'), 'doom:' + hash);
+    assert.equal(await evaluate('!!globalThis.doomBundle'), false,
+      'Loaded game retains the embedded collection');
+    assert.equal(await evaluate('document.querySelectorAll("[data-game]").length'),
+      0, 'Game buttons retain unused WADs after loading');
+    if (process.env.DOOM_AUTOPLAY_BLOCKED && automatic && !checkedAutoplay) {
+      assert.equal(await evaluate('Doom.audio.context.state'), 'suspended',
+        'Autoplay test did not block audio');
+      assert(await evaluate('Doom.loader.hidden'), 'Autostart left a load screen');
+      checkedAutoplay = true;
+      console.log('PASS: automatic startup before user activation');
+    }
+    await send('Runtime.evaluate', {
+      expression: 'Doom.canvas.click()', userGesture: true,
+    });
+    await until(() => evaluate('Doom.audio.context.state === "running"'));
   }
 
   await send('Runtime.enable');
   await send('Network.enable');
   for (wadPath of wadPaths) {
-    await send('Page.navigate', {url});
-    await until(() => evaluate('typeof Doom !== "undefined"'));
+    await navigate();
     await evaluate('localStorage.clear()');
     await loadWad();
     assert(await evaluate('Doom.running'), await evaluate('Doom.message.textContent'));
@@ -140,8 +183,7 @@ try {
       await testRenderer(evaluate, send);
       // Original recorded play exercises moving doors, lifts, monsters,
       // muzzle flashes, switches and level/title transitions without cheats.
-      await send('Page.navigate', {url});
-      await until(() => evaluate('typeof Doom !== "undefined" && !Doom.engine'));
+      await navigate();
       await loadWad();
       const demos = await evaluate(`(async () => {
         Settings.value.renderer = true; Settings.value.freelook = true;
@@ -344,8 +386,7 @@ try {
     await testSettings(evaluate, send);
 
     // A fresh runtime must restore the saved game, not just the MEMFS instance.
-    await send('Page.navigate', {url});
-    await until(() => evaluate('typeof Doom !== "undefined" && !Doom.engine'));
+    await navigate();
     await loadWad();
     const restored = await evaluate("Doom.engine.FS.readFile('/doomsav0.dsg').length");
     assert.equal(restored, result.saveBytes);
@@ -388,8 +429,7 @@ try {
     })()`);
     console.log(`PASS: rendered and saved all ${maps} maps at 1706×800`);
 
-    await send('Page.navigate', {url});
-    await until(() => evaluate('typeof Doom !== "undefined" && !Doom.engine'));
+    await navigate();
     await loadWad();
     const demoFrames = await evaluate(`(async () => {
       let frames = 0;

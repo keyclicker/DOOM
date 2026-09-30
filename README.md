@@ -32,35 +32,47 @@ settings, and music sequencing stay in C. Vendored C stays in `lib/`.
 
 ## Build and run
 
-Requires GNU Make 4.3+, Emscripten, Python 3, and `cpp` on PATH.
+Requires GNU Make 4.3+, Emscripten, Python 3, `cpp`, Terser, and Zopfli.
+Run `make` to build `build/doom-engine.html`, then open it directly in your
+browser and select a local IWAD. It works offline, including via `file://`.
+
+Four self-contained HTML targets are available:
+
+| Command | Output in `build/` | Startup |
+| --- | --- | --- |
+| `make doom-engine.html` | `doom-engine.html` | Local WAD picker; distributable |
+| `make doom.html` | `doom.html` | DOOM / DOOM II selector; private |
+| `make doom1.html` | `doom1.html` | Starts DOOM automatically; private |
+| `make doom2.html` | `doom2.html` | Starts DOOM II automatically; private |
+
+Store your IWADs at `build/wads/DOOM.WAD` and `build/wads/DOOM2.WAD`, then
+run `make -j4 preview` to build all four. Override `DOOM1_WAD` or `DOOM2_WAD`
+to use other paths. Each HTML also gets a `.gz` companion. Inputs and
+outputs stay out of Git; `make clean` preserves the WADs.
+
+Single-game builds start without a picker or Play button. Click the game to
+activate audio, capture the mouse, and enter fullscreen. A keypress can also
+activate audio. Both games retain separate saves based on their IWAD hashes.
+
+The collection packer accepts any number of local IWADs, in selector order:
 
 ```sh
-make
-python3 -m http.server 8000 --directory build
+python3 tools/pack_single.py build --output build/collection.html \
+  --wad /path/to/first.wad --wad /path/to/second.wad --wad /path/to/third.wad
 ```
 
-Open `http://localhost:8000` and select a local IWAD. Deploy `index.html`,
-`doom.wasm`, and `music.wasm` from `build/` together on a static HTTPS server.
-`doom.js` and object files are build intermediates.
+All WADs, engine modules, and browser code share one XZ stream, allowing
+matches across the collection. The selector uses WAD filenames as labels.
+All targets retain both renderers, CRT filters, music, saves, and settings.
+Embedded game data is for private use; do not redistribute it.
 
-The default engine optimization is `-Oz` with LTO; the audio module uses
-`-O2`. Run `make clean` before changing compiler flags, such as `make OPT=-O2`.
-Header dependencies are tracked; `make clean` removes all generated outputs.
+For the uncompressed development build, use `make build/index.html` and
+`python3 -m http.server 8000 --directory build`. This target only requires
+Make, Emscripten, Python, and `cpp`. Deploy `index.html`, `doom.wasm`, and
+`music.wasm` together; `doom.js` and objects are intermediate files.
 
-For a compressed HTML that opens directly, including offline with `file://`,
-install Terser and Zopfli, then use:
-
-```sh
-# Distributable: player supplies their own WAD.
-make single
-
-# Private: embed a local IWAD. Do not redistribute game data.
-make single-wad WAD=/absolute/path/to/DOOM.WAD
-```
-
-Outputs are `build/single/DOOM.html` and `build/single-wad/DOOM.html`, each
-with a gzip companion. Both retain all renderers, filters, music, saves, and
-settings. WADs and build artifacts stay out of Git.
+The engine uses `-Oz` with LTO; the audio module uses `-O2`. Run `make clean`
+before changing compiler flags, such as `make OPT=-O2`.
 
 See [browser instructions](web/README.md) for controls, settings, compression,
 and tests. Tests use Node 22+ and Chromium, without npm dependencies:

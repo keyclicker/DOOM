@@ -10,7 +10,7 @@ Requires GNU Make 4.3+, Python 3, a C preprocessor (`cpp`), and Emscripten
 (`emcc` on PATH). Tested with Emscripten 6.0.9.
 
 ```sh
-make
+make build/index.html
 python3 -m http.server 8000 --directory build
 ```
 
@@ -36,23 +36,29 @@ module; no package installation or network access happens during packaging.
 
 ```sh
 # Distributable: the player selects their own WAD.
-make single
+make doom-engine.html
 
-# Private: includes exactly this local IWAD. Do not redistribute game data.
-make single-wad WAD=/absolute/path/to/DOOM.WAD
+# Private previews: store IWADs in build/wads/DOOM.WAD and DOOM2.WAD.
+make -j4 preview
 ```
 
-Outputs are `build/single/DOOM.html` and
-`build/single-wad/DOOM.html`, respectively. Each directory also gets
-`DOOM.html.gz`. Both targets preserve all renderers, CRT filters, music, saves,
-and settings. Software rendering and the original settings remain the defaults.
-The ordinary three-file build remains available through `make`.
+The outputs in `build/` are `doom-engine.html` (WAD picker), `doom.html`
+(DOOM / DOOM II selector), `doom1.html` (automatic DOOM startup), and
+`doom2.html` (automatic DOOM II startup). Each also gets a `.html.gz` file.
+Build them individually with `make <filename>`. `DOOM1_WAD` and `DOOM2_WAD`
+can override the default input paths. `make clean` preserves `build/wads/`.
 
-Open **DOOM.html directly**, including offline with `file://`. The private build
-shows **Play DOOM** instead of the WAD picker. A click starts audio and requests
-fullscreen; browsers may require another click on the canvas to capture input.
-Saves still use browser local storage; moving/renaming a local HTML can change
-which storage the browser exposes. Keep a stable file location for saves.
+Both renderers, every CRT filter, music, saves, and settings remain available.
+Software rendering and the original settings are the defaults. The ordinary
+three-file build remains available through `make build/index.html`.
+
+Open any HTML directly, including offline with `file://`. A single embedded
+IWAD starts automatically; a collection shows only game buttons. Click the
+canvas to activate audio, capture the mouse, and request fullscreen. Keyboard
+input also activates audio. Autoplay restrictions never block game startup.
+Saves use browser local storage, separately for each IWAD's SHA-256. Moving or
+renaming a local HTML can change which storage the browser exposes, so keep a
+stable file location for saves.
 
 The `.gz` companion is for downloading or serving with
 `Content-Type: text/html; charset=utf-8` and `Content-Encoding: gzip`.
@@ -61,9 +67,14 @@ transcoding or HTML minification: its Base122 attributes contain significant
 control characters. Editing the generated file as text can corrupt the payload.
 
 `tools/pack_single.py` minifies JavaScript, then compresses the HTML, raw shader data,
-both WASM modules, and optional WAD together with XZ. Six LZMA2 context choices
-are tried at the extreme preset with a 16 MiB dictionary and a deep match
-search; the smallest wins. Base122 adds about 14.3% instead of Base64's 33.3%.
+both WASM modules, collection labels, and every IWAD together in one XZ
+stream. Repeating `--wad` accepts any number of local IWADs; zero gives a
+picker, one starts automatically, and more shows a selector. Labels come from
+filenames, with DOOM / DOOM II labels for their usual filenames. Six LZMA2
+context choices are tried at the extreme preset with a deep match search;
+the smallest wins. The shared dictionary grows with archive size from
+16 MiB up to 64 MiB, retaining cross-WAD matches without unbounded decoder
+memory. Base122 adds about 14.3% instead of Base64's 33.3%.
 Native gzip unpacks the embedded XZ decoder. Zopfli uses 100 iterations for that
 decoder and the final gzip companion; this trades build time for file size.
 All decoding happens once, before gameplay, with no asset requests. A small
@@ -73,19 +84,24 @@ are verified after compression; XZ also checks CRC32 during browser startup.
 The XZ decoder is pinned locally in
 [`lib/xz-decompress`](../lib/xz-decompress/README.md). Its source and license
 notices ship in the HTML. The generated artifacts and WADs are ignored by Git.
-Never publish the `single-wad` output as a project release.
+Never publish embedded-WAD outputs as project releases.
 
-Run the existing gameplay/music/save tests against either local HTML:
+Run the gameplay/music/save tests against the local HTML files:
 
 ```sh
-DOOM_HTML=build/single/DOOM.html \
-  node tests/test.mjs /path/to/DOOM.WAD
-DOOM_HTML=build/single-wad/DOOM.html \
-  node tests/test.mjs /path/to/the/same/DOOM.WAD
+DOOM_HTML=build/doom-engine.html node tests/test.mjs build/wads/DOOM.WAD
+DOOM_HTML=build/doom.html node tests/test.mjs \
+  build/wads/DOOM.WAD build/wads/DOOM2.WAD
+DOOM_HTML=build/doom1.html DOOM_AUTOPLAY_BLOCKED=1 \
+  node tests/test.mjs build/wads/DOOM.WAD
+DOOM_HTML=build/doom2.html DOOM_AUTOPLAY_BLOCKED=1 \
+  node tests/test.mjs build/wads/DOOM2.WAD
 ```
 
 `DOOM_PRESETS_ONLY=1` selects the CRT suite instead. The harness drives the real
-file input or Play button, verifies the IWAD hash, and rejects network requests.
+file input, collection buttons, or automatic startup, verifies the IWAD hash,
+and rejects network requests. `DOOM_AUTOPLAY_BLOCKED=1` checks that a direct
+build starts before user activation, then enables audio through a click.
 
 ## Controls
 
