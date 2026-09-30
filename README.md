@@ -8,6 +8,10 @@
 
 No server. No install. No internet.
 
+<a href="https://keyclicker.dev/DOOM.html/">
+  <img alt="Play in your browser" src="https://img.shields.io/badge/%E2%96%B6%20PLAY%20IN%20YOUR%20BROWSER-keyclicker.dev%2FDOOM.html-8b0000?style=for-the-badge&labelColor=b22222">
+</a>
+
 [![License: GPL-2.0](https://img.shields.io/badge/license-GPL--2.0-blue)](LICENSE.TXT)
 ![Engine: 230 KB](https://img.shields.io/badge/engine-230_KB-brightgreen)
 ![Runtime deps: 0](https://img.shields.io/badge/runtime_deps-0-brightgreen)
@@ -85,6 +89,10 @@ menu. Doom's font, skull cursor, and sounds; no HTML overlay.
   FPS, WASD). Flip between them from one menu row.
 
 ## Quick start
+
+No build needed to try it: open
+**[keyclicker.dev/DOOM.html](https://keyclicker.dev/DOOM.html/)** and drop in
+a WAD. To build your own copy:
 
 You need GNU Make 4.3+, Emscripten, Python 3, `cpp`, Terser, and Zopfli.
 
