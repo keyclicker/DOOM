@@ -113,7 +113,7 @@ try {
     const hash = createHash('sha256').update(await readFile(wadPath)).digest('hex');
     const automatic = await evaluate('Doom.loading || Doom.running');
     if (automatic) {
-      assert(await evaluate('document.querySelector("#choose").hidden'),
+      assert(await evaluate('!document.querySelector("#choose")'),
         'Single-game bundle unexpectedly requires a picker');
     } else if (await evaluate('!!document.querySelector("[data-game]")')) {
       assert.equal(await evaluate('Doom.running'), false,

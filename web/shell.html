@@ -4,26 +4,83 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DOOM</title>
 <!-- Doom source: GPL-2.0. See the source repository's LICENSE.TXT. -->
-<!-- Nuked OPL3: LGPL-2.1-or-later. Source: https://github.com/keyclicker/DOOM -->
+<!-- Nuked OPL3: LGPL-2.1-or-later. Source: https://github.com/keyclicker/DOOM.html -->
+<!-- GitHub mark: Octicons, MIT. -->
 <style>
 * { box-sizing: border-box; }
-html, body { margin: 0; width: 100%; height: 100%; overflow: hidden;
-  background: #000; color: #ddd; font: 16px monospace; }
-canvas { position: absolute; inset: 0; margin: auto;
-  width: min(100vw, 133.333333vh); height: min(100vh, 75vw);
-  image-rendering: pixelated; }
-#load { position: absolute; inset: 0; display: flex; align-items: center;
-  justify-content: center; flex-direction: column; gap: 16px; }
 [hidden] { display: none !important; }
-button { font: inherit; color: inherit; background: #181818;
-  border: 1px solid #555; padding: 12px 20px; cursor: pointer; }
-#message { max-width: 50ch; text-align: center; white-space: pre-wrap; }
+
+/* Near-black, not #000: OLED pixels stay lit, so text does not smear. */
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden;
+  background: #0e0e0e; color: #858585;
+  font: 14px/1.7 ui-monospace, Menlo, Consolas, monospace; }
+
+/* The canvas and the launcher share Doom's 4:3 box. */
+canvas, #load { position: absolute; inset: 0; margin: auto;
+  width: min(100vw, 133.333333vh); height: min(100vh, 75vw); }
+canvas { image-rendering: pixelated; }
 canvas.browser-aspect { width: 100vw; height: 100vh; }
+
+#load { background: #0e0e0e; border: 1px solid #232323; }
+#load.drag { border: 1px dashed #aaa; }
+.launcher { position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%); width: min(420px, 86%); }
+.launcher header { display: flex; justify-content: space-between; gap: 2em; }
+.launcher h1 { margin: 0; font: inherit; color: #e4e4e4; }
+.launcher p { margin: 0; }
+.dim { color: #555; }
+.bright { color: #e4e4e4; }
+.error { color: #e0443a; }
+#message { margin-top: 1.4em; white-space: pre-line; }
+#message:empty { display: none; }
+
+.launcher a { display: inline-flex; align-items: center; gap: .5em;
+  color: #555; text-decoration: none; }
+.launcher a svg { width: 1em; height: 1em; fill: currentColor; }
+.launcher a:hover, .launcher a:focus-visible { color: #e4e4e4; outline: none; }
+.launcher a:hover span, .launcher a:focus-visible span {
+  text-decoration: underline; text-underline-offset: 3px; }
+
+#menu { display: grid; gap: .3em; margin: 1.4em 0; }
+#menu:empty { margin: .4em 0; }
+#menu button { display: flex; justify-content: space-between;
+  margin: 0 -.6em; padding: .15em .6em; border: 0; background: none;
+  font: inherit; color: inherit; text-align: left; cursor: pointer; }
+#menu button::before { content: "  "; white-space: pre; }
+#menu button span:first-child { flex: 1; }
+#menu button span:last-child { color: #555; }
+#menu .on { color: #e4e4e4; background: #1c1c1c; }
+#menu .on::before { content: "› "; }
+
+#progress { position: absolute; left: 0; bottom: 0; width: 0; height: 1px;
+  background: #cfcfcf; }
 </style>
 <canvas id="screen" width="320" height="200"></canvas>
-<div id="load"><button id="choose">Load WAD</button>
+<div id="load">
+  <div class="launcher">
+    <header>
+      <h1>DOOM.html</h1>
+      <a href="https://github.com/keyclicker/DOOM.html" target="_blank"
+        rel="noopener" title="https://github.com/keyclicker/DOOM.html">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58
+        0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49
+        -2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01
+        -.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+        -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12
+        0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04
+        2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87
+        3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46
+        .55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>GitHub</span>
+      </a>
+    </header>
+    <p class="dim">Run doom in browser.</p>
+    <p id="message"></p>
+    <div id="menu"></div>
+    <p id="hint" class="dim"></p>
+  </div>
+  <div id="progress"></div>
+</div>
 <input id="file" type="file" accept=".wad" hidden>
-<span id="message">Or drop a WAD here</span></div>
 <script>
 /* BROWSER_CODE */
 </script>

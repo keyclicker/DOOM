@@ -59,8 +59,8 @@ $(O)/music.wasm: $(MUSIC_OBJECTS)
 
 $(O)/index.html: $(O)/doom.js $(O)/doom.wasm $(O)/music.wasm \
  tools/pack.py tools/pack_shaders.py web/shell.html \
- web/app.js web/audio.js web/settings.js web/render.js web/music-worklet.js \
- web/crt.js web/crt-presets.js $(wildcard shaders/*/*)
+ web/launcher.js web/app.js web/audio.js web/settings.js web/render.js \
+ web/music-worklet.js web/crt.js web/crt-presets.js $(wildcard shaders/*/*)
 	$(PYTHON) tools/pack.py $(O)
 
 $(O)/doom-engine.html $(O)/doom-engine.html.gz &: $(O)/index.html $(PACK_SOURCES)

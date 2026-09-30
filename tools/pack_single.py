@@ -138,8 +138,10 @@ def main():
         capture_output=True, check=True).stdout
     html = (b'<!doctype html><html lang="en"><meta charset="utf-8">'
             b'<meta name="viewport" content="width=device-width,initial-scale=1">'
-            b'<title>DOOM</title><style>body{margin:0;background:#000;color:#ddd;'
-            b'font:16px monospace}</style><body>Unpacking DOOM...'
+            b'<title>DOOM</title><style>body{margin:0;height:100vh;display:grid;'
+            b'place-items:center;background:#0e0e0e;color:#555;'
+            b'font:14px ui-monospace,Menlo,Consolas,monospace}</style>'
+            b'<body>unpacking DOOM.html...'
             + element('decoder', zopfli(decoder))
             + element('payload', packed)
             + b'<script>' + bootstrap + b'</script></html>')
