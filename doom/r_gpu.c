@@ -440,7 +440,8 @@ static void sprite(mobj_t *thing)
     material_t *mat;
     int rotation = 0, lump, flip, first;
     float left, right, top, x, y, light, sine, cosine;
-    if (thing == viewplayer->mo) return;
+    /* Sector lists omit invisible map actors; the thinker list does not. */
+    if (thing == viewplayer->mo || (thing->flags & MF_NOSECTOR)) return;
     frame = &sprites[thing->sprite].spriteframes[thing->frame & FF_FRAMEMASK];
     if (frame->rotate)
         rotation = (R_PointToAngle(thing->x, thing->y) - thing->angle
